@@ -39,6 +39,26 @@ session (`U:\OpencodeProjects\catcar`, the Radio mod is `catcar/Radio/`); this r
   (`Builtin.MirrorOffset`): corners 6/14/3/18 ms, cars 9/12, portables by id, garage radio 0. The import fills them in
   for speakers that have none. Changing one restarts all channels. Drift control measures on voice 0 and allows for its
   offset (`lag0`).
+- **Audio probe (2026-11-26, throwaway plugin, 5 dumps in the garage at several spots; removed again):**
+  - Unity: 48 kHz, **Stereo**, DSP buffer 1024, no spatializer plugin, AudioListener volume 1, no filters on the
+    listener (camera `PlayerCamera/Main Camera`, ears **1.0 m** above the floor: the player is a cat).
+  - Mixer `MainAudioMixer`: groups Master (-5.9 dB), FX (-14.4 dB, the radios), Engines, Engines Exterior, Music
+    (-13.7 dB), Voice (-6 dB). Volumes only as far as the runtime shows.
+  - Radio sources: exactly as ClubEQ has them (blend 1, spread 60, Logarithmic, doppler 0, reverbZoneMix 1, no
+    bypass, group FX; volume = knob x player Volume 0.25 x 1.5 Underground / x 1.3 car). Custom curves can't be read
+    (`GetCustomCurve` stripped).
+  - **Unity's reverbs are I3DL2** (`AudioReverbFilter` Room: room -1000, roomHF -454, decay 0.4, HF 0.83, reflections
+    -1646, reverb 53 @ 3 ms; ParkingLot: -1000, 0, 1.65, 1.5, -1363, -1153 @ 12 ms). FMOD's preset table is these
+    converted, which pinned the conversion (`RoomReverb.FromI3DL2`, selftest checks Room and Generic):
+    high cut = HFRef / sqrt((1-g)/g), g = 10^(roomHF/2000); mix = late/(early+late); wet = room/100 + 10 log10(e²+l²).
+    The old hand conversion made the garage reverb too dull (high cut 4066 -> **6538 Hz**) and 1 dB too dry (-8 ->
+    **-7.03 dB**).
+  - Cars parked at CarRadio (-5.81, 1.39, -338.44) and (-9.21, 1.39, -338.44) (= (2.0, 1.54, 6.88) and (-1.4, 1.54,
+    6.88) from the middle), facing -z, cockpit camera right under the radio. Garage radio source at y 0.37 world.
+  - timeSamples per dump: speakers differ from the garage radio by 0 or ±1024 samples (one DSP block, 21 ms); the
+    sign follows the read order, so the real offsets are inside one block (0..21 ms), as ClubEQ's defaults.
+  - The import now also sets the garage reverb, the cars' spots and the ear height, and decides "same music" by
+    playlist roots (the user's garage radio follows Car 1: link 1 on station 0).
 - User A/B (same song, same spot): CATCAR sounds like a larger garage, with better EQ and clarity. The game's mixer
   is "MainAudioMixer" (sharedassets0) with groups Master, Engines, Engines Exterior, Music, Voice (plus the FX group
   the mod routes to, not found in that file); what effects sit on them can't be read from the strings. Next step if

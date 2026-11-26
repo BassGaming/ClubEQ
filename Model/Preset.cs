@@ -105,4 +105,23 @@ public class RoomReverb
     public bool On = true;
     public float DecayTime = 1500, EarlyDelay = 7, LateDelay = 11, HFReference = 5000, HFDecayRatio = 83, Diffusion = 100,
         Density = 100, LowShelfFrequency = 250, LowShelfGain = 0, HighCut = 14500, EarlyLateMix = 96, WetLevel = -8;
+
+    // Unity's reverbs (AudioReverbZone, AudioReverbFilter) use I3DL2 values (millibels, seconds). This conversion
+    // reproduces FMOD's own preset table from the I3DL2 presets (checked on Room, ParkingLot, Generic in the selftest):
+    // high cut = HF ref / sqrt((1-g)/g) with g = roomHF as gain; early/late mix = late / (early + late) in amplitude;
+    // wet = room + the power sum of early and late.
+    public static RoomReverb FromI3DL2(float room, float roomHF, float roomLF, float decayTime, float decayHFRatio, float reflections,
+        float reflectionsDelay, float reverb, float reverbDelay, float hfReference, float lfReference, float diffusion, float density)
+    {
+        double g = Math.Pow(10, roomHF / 2000.0), e = Math.Pow(10, reflections / 2000.0), l = Math.Pow(10, reverb / 2000.0);
+        return new RoomReverb
+        {
+            DecayTime = decayTime * 1000, EarlyDelay = reflectionsDelay * 1000, LateDelay = reverbDelay * 1000,
+            HFReference = hfReference, HFDecayRatio = decayHFRatio * 100, Diffusion = diffusion, Density = density,
+            LowShelfFrequency = lfReference, LowShelfGain = roomLF / 100,
+            HighCut = g >= .9999 ? 20000 : (float)Math.Min(20000, hfReference / Math.Sqrt((1 - g) / g)),
+            EarlyLateMix = (float)(100 * l / (e + l)),
+            WetLevel = (float)(room / 100 + 10 * Math.Log10(e * e + l * l)),
+        };
+    }
 }

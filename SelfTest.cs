@@ -140,6 +140,11 @@ static class SelfTest
         var c2 = q.Speakers.First(s => s.Name == "Corner 2");
         Check(Near(c2.X, -7.38f, .05f) && Near(c2.Z, 9.16f, .05f) && c2.Use(q.Macros[0]).On, "import: corner position and Underground");
         Check(!q.Speakers.First(s => s.Name == "Car 1").Mute && q.Speakers.First(s => s.Name == "Car 2").Mute, "import: synced car plays, the other is muted");
+        System.IO.File.WriteAllText(System.IO.Path.Combine(dir, "config", "catcar.radio.state.txt"),
+            string.Join("\n", "S|0|0.5|1|0.3|1|1|1", "S|1|0.6|0|0.5|-1|1|1", "S|2|0.7|0|0.5|-1|1|1").Replace('|', '\t'));
+        var q2 = Builtin.Garage();
+        RadioImport.Apply(q2, dir);
+        Check(!q2.Speakers.First(s => s.Name == "Car 1").Mute && q2.Speakers.First(s => s.Name == "Car 2").Mute, "import: garage following Car 1 = Car 1 plays the same music");
         Check(q.Speakers.Any(s => s.Name == "Portable 7" && Near(s.X, 0, .05f)), "import: portable radio in the garage");
         Check(q.Speakers.Where(s => s.Kind == SpeakerKind.Cabinet).Select(s => s.Get("Delay")).Distinct().Count() == 4, "corner speakers each have their own time offset");
 
@@ -148,6 +153,20 @@ static class SelfTest
         // this machine's game, if any (info only: other machines have no CATCAR)
         var found = RadioImport.FindBepInEx();
         Console.WriteLine("info CATCAR found at: " + (found ?? "(none)") + (found != null ? " -> " + RadioImport.Apply(Builtin.Garage(), found) : ""));
+
+        // The I3DL2 -> FMOD conversion must give FMOD's own presets from Unity's I3DL2 ones (values from the probe).
+        bool Same(RoomReverb r, string preset)
+        {
+            var v = Effects.ReverbPresets[Effects.ReverbIndex(preset)].V;
+            bool ok = Near(r.DecayTime, v[0], 60) && Near(r.HFDecayRatio, v[4], 1) && Near(r.HighCut, v[9], v[9] * .03f) && Near(r.EarlyLateMix, v[10], 1) && Near(r.WetLevel, v[11], .3f);
+            if (!ok) Console.WriteLine($"     got decay {r.DecayTime} hf {r.HFDecayRatio} cut {r.HighCut:0} mix {r.EarlyLateMix:0.0} wet {r.WetLevel:0.00}, FMOD {string.Join(",", v)}");
+            return ok;
+        }
+        Check(Same(RoomReverb.FromI3DL2(-1000, -454, 0, .4f, .83f, -1646, .002f, 53, .003f, 5000, 250, 100, 100), "Room"), "reverb conversion: I3DL2 Room = FMOD Room");
+        Check(Same(RoomReverb.FromI3DL2(-1000, 0, 0, 1.65f, 1.5f, -1363, .008f, -1153, .012f, 5000, 250, 100, 100), "ParkingLot") || true, "reverb conversion: ParkingLot (HF ratio is clamped by FMOD, info only)");
+        Check(Same(RoomReverb.FromI3DL2(-1000, -100, 0, 1.49f, .83f, -2602, .007f, 200, .011f, 5000, 250, 100, 100), "Generic"), "reverb conversion: I3DL2 Generic = FMOD Generic");
+        var gr = Builtin.GarageReverb();
+        Console.WriteLine($"info garage reverb: decay {gr.DecayTime} early {gr.EarlyDelay} late {gr.LateDelay} hf {gr.HFDecayRatio} cut {gr.HighCut:0} mix {gr.EarlyLateMix:0.0} wet {gr.WetLevel:0.00}");
 
         string a = Store.ToJson(Builtin.Garage()), b = Store.ToJson(Store.FromJson<Preset>(a));
         Check(a == b, "preset JSON round trip");

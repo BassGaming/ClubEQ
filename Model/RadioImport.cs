@@ -88,7 +88,23 @@ public static class RadioImport
         }
 
         // S<tab>index<tab>vol<tab>muffle<tab>amt<tab>link<tab>repeat<tab>shuffle; station 0 = garage radio, 1/2 = the cars
+        // The garage itself is fixed: its reverb, the parked cars, a cat's ear height.
+        p.Reverb = Builtin.GarageReverb();
+        p.Room.ListenerY = 1;
+        foreach (var c in Builtin.Cars())
+            if (p.Speakers.FirstOrDefault(s => s.Name == c.Name && s.Kind == SpeakerKind.Car) is { } car)
+            {
+                (car.X, car.Y, car.Z, car.Yaw) = (c.X, c.Y, c.Z, c.Yaw);
+                if (car.Inside != null) (car.Inside.OffsetX, car.Inside.OffsetZ) = (0, 0);
+            }
+        done.Add("garage reverb, parked cars, ear height 1 m");
         var cars = p.Speakers.Where(s => s.Kind == SpeakerKind.Car).OrderBy(s => s.Name).ToList();
+        // Which playlist each station plays: its link (a root) or itself. Radios on the garage radio's playlist play
+        // the same music, either way round (the garage can follow Car 1, too).
+        var root = new Dictionary<int, int>();
+        foreach (var f in lines.Select(l => l.Split('\t')).Where(f => f[0] == "S" && f.Length >= 6))
+            root[int.Parse(f[1])] = int.TryParse(f[5], out var lk) && lk >= 0 ? lk : int.Parse(f[1]);
+        bool SameMusic(int st) => root.GetValueOrDefault(st, st) == root.GetValueOrDefault(0, 0);
         foreach (var f in lines.Select(l => l.Split('\t')).Where(f => f[0] == "S" && f.Length >= 6))
         {
             int st = int.Parse(f[1]);
@@ -97,15 +113,15 @@ public static class RadioImport
             if (st == 0 && p.Speakers.FirstOrDefault(s => s.Kind == SpeakerKind.Boombox && !s.Name.StartsWith("Portable")) is { } box)
             {
                 box.P["Volume"] = vol; Use(box, muffle, amt);
-                if (LastVector(log, @"Radio built on [^\n]* at ") is { } at) { box.X = at.X - mid.X; box.Z = at.Z - mid.Z; box.Y = .75f; }
+                if (LastVector(log, @"Radio built on [^\n]* at ") is { } at) { box.X = at.X - mid.X; box.Z = at.Z - mid.Z; box.Y = .52f; }
                 done.Add($"garage radio {vol * 100:0} %{(muffle ? $", Underground {amt * 100:0} %" : "")}");
             }
             else if (st is 1 or 2 && st - 1 < cars.Count)
             {
                 var car = cars[st - 1];
                 car.P["Volume"] = vol * 1.3f; // the mod plays car radios 1.3x (the body's low-pass eats loudness)
-                car.Mute = f[5] != "0";       // only a car synced to the garage plays the same music; its own playlist isn't ClubEQ's input
-                done.Add($"{car.Name} {(car.Mute ? "muted (own playlist)" : $"{vol * 100:0} %")}");
+                car.Mute = !SameMusic(st);    // another playlist isn't ClubEQ's input
+                done.Add($"{car.Name} {(car.Mute ? "muted (other playlist)" : $"{vol * 100:0} %")}");
             }
         }
 
@@ -134,7 +150,7 @@ public static class RadioImport
                 }
                 else
                 {
-                    if (int.Parse(x[6]) != 0) continue; // a portable on a car's playlist plays other music
+                    if (!SameMusic(int.Parse(x[6]))) continue; // a portable on another playlist plays other music
                     p.Speakers.Add(s = Builtin.Portable("Portable " + id, px, pz));
                     portables++;
                 }

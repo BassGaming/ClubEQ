@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace ClubEQ.Model;
 
@@ -45,22 +46,29 @@ public static class Builtin
         Chain = { Fx("HighPass", ("Cutoff", 90)), Fx("LowPass", ("Cutoff", 11000)), Fx("Reverb", ("Preset", 0)), Fx("Distortion", ("Level", 0)) },
     };
 
+    // The garage's AudioReverbZone "GarageReverb" (preset User) as the game reports it (probe/ReverbDump): room -900,
+    // roomHF -400, roomLF 0, decay 1.2 s, HF ratio 0.55, reflections -500 @ 8 ms, reverb +100 @ 18 ms, HF ref 5000,
+    // LF ref 250, diffusion 100, density 100. Gives high cut ~6.5 kHz, wet ~-7 dB, early/late 67 %.
+    public static RoomReverb GarageReverb() => RoomReverb.FromI3DL2(-900, -400, 0, 1.2f, .55f, -500, .008f, 100, .018f, 5000, 250, 100, 100);
+
+    // The two crew cars, parked behind the middle facing the back wall (probe: HubTeamCar / HubTeamCar2 CarRadio at
+    // (-5.81, 1.39, -338.44) / (-9.21, 1.39, -338.44), cockpit camera right under the radio). Outside: through the
+    // body, mostly bass. Inside (within 1.5 m of the driver's head): open, and from all around. Volume = knob x 1.3.
+    public static Speaker[] Cars() => new[] { ("Car 1", 2.0f, false), ("Car 2", -1.4f, true) }.Select(c => new Speaker
+    {
+        Name = c.Item1, Kind = SpeakerKind.Car, X = c.Item2, Y = 1.54f, Z = 6.88f, Yaw = 180, Mute = c.Item3,
+        P = P(("Volume", .7f * 1.3f), ("MinDistance", 4), ("MaxDistance", 150), ("Spread", 60), ("Level3D", 1), ("Delay", c.Item1 == "Car 1" ? 9 : 12)),
+        Chain = { Fx("LowPass", ("Cutoff", 500)) },
+        Inside = new InsideProfile { OffsetX = 0, OffsetZ = 0, Radius = 1.5f, Values = P(("LowPass.Cutoff", 22000), ("Level3D", .25f)) },
+    }).ToArray();
+
     public static Preset Garage()
     {
         var p = new Preset { Name = "Garage" };
         // Walls measured by the mod (log "Corner speakers: walls at +x 7.4 -x 7.8 +z 9.6 -z 5.5 m from the middle").
-        p.Room = new Room { MinX = -7.8f, MaxX = 7.4f, MinZ = -5.5f, MaxZ = 9.6f, Height = 3, ListenerX = 0, ListenerY = 1.6f, ListenerZ = -1.5f };
-        // The garage's AudioReverbZone "GarageReverb" (preset User), converted from the values the game reports (CLAUDE.md).
-        // Game: room -900, roomHF -400, roomLF 0, decay 1.2 s, HF ratio 0.55, reflections -500 @ 8 ms, reverb +100 @ 18 ms,
-        // HF ref 5000, LF ref 250, diffusion 100, density 100.
-        p.Reverb = new RoomReverb
-        {
-            DecayTime = 1200, EarlyDelay = 8, LateDelay = 18, HFReference = 5000, HFDecayRatio = 55, Diffusion = 100, Density = 100,
-            LowShelfFrequency = 250, LowShelfGain = 0,
-            HighCut = 4066,      // roomHF -4 dB at 5 kHz as a 1-pole low-pass
-            EarlyLateMix = 66.6f, // reflections -5 dB vs reverb +1 dB
-            WetLevel = -8,        // room -9 dB + the louder part (+1 dB)
-        };
+        // Ears at 1.0 m: you are a cat (probe: camera 1.0 m above the garage floor).
+        p.Room = new Room { MinX = -7.8f, MaxX = 7.4f, MinZ = -5.5f, MaxZ = 9.6f, Height = 3, ListenerX = 0, ListenerY = 1, ListenerZ = -1.5f };
+        p.Reverb = GarageReverb();
 
         // The user's own setup in the mod on 2026-11-26 (catcar.radio.state.txt; "Import from CATCAR" re-reads it):
         // garage radio 58 % with Underground at 39 %, corners 41-47 % with Underground on corners 2 and 4, Car 1 synced
@@ -68,7 +76,7 @@ public static class Builtin
         // Garage radio: log "Radio built on TireRackFixture(Clone) at (-1.51, -0.15, -349.52)", on its crate.
         var box = new Speaker
         {
-            Name = "Boombox", Kind = SpeakerKind.Boombox, X = 6.3f, Y = .75f, Z = -4.2f, Yaw = 0,
+            Name = "Boombox", Kind = SpeakerKind.Boombox, X = 6.3f, Y = .52f, Z = -4.2f, Yaw = 0, // probe: source at y 0.37 world
             P = P(("Volume", .585f), ("MinDistance", 7), ("MaxDistance", 150), ("Spread", 60), ("Level3D", 1)),
             Chain = { Fx("HighPass", ("Cutoff", 90)), Fx("LowPass", ("Cutoff", 12000)), Fx("Reverb", ("Preset", Room)), Fx("Distortion", ("Level", 0)) },
         };
@@ -88,16 +96,7 @@ public static class Builtin
             p.Speakers.Add(c);
         }
 
-        // The two crew cars, radio 0.9 m above the car. Outside: through the body, mostly bass. Inside (within 1.5 m of
-        // the driver's head): open, and from all around. Volume = knob x 1.3. Parked spots are a guess: drag them.
-        foreach (var (name, x, vol, mute) in new[] { ("Car 1", -2.6f, .7f * 1.3f, false), ("Car 2", 2.6f, .7f * 1.3f, true) })
-            p.Speakers.Add(new Speaker
-            {
-                Name = name, Kind = SpeakerKind.Car, X = x, Y = .9f, Z = 1.5f, Yaw = 0, Mute = mute,
-                P = P(("Volume", vol), ("MinDistance", 4), ("MaxDistance", 150), ("Spread", 60), ("Level3D", 1), ("Delay", name == "Car 1" ? 9 : 12)),
-                Chain = { Fx("LowPass", ("Cutoff", 500)) },
-                Inside = new InsideProfile { OffsetX = -.35f, OffsetZ = -.2f, Radius = 1.5f, Values = P(("LowPass.Cutoff", 22000), ("Level3D", .25f)) },
-            });
+        foreach (var c in Cars()) p.Speakers.Add(c);
 
         // Underground: the bass through a concrete wall at a rave (Fx.Update). Boombox and corners only, not the cars.
         p.Macros.Add(new Macro
