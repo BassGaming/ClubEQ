@@ -84,6 +84,7 @@ public partial class MainWindow : Window
             OutputBox.SelectedItem = outs.FirstOrDefault(n => n == settings.Output) ?? outs.FirstOrDefault();
             settings.Input = InputBox.SelectedItem as string ?? "";
             settings.Output = OutputBox.SelectedItem as string ?? "";
+            SaveSettings(); // now, not only on close: a stopped process never closes
         }
         catch (Exception e) { Status("Devices: " + e.Message); }
         finally { loading = false; }
@@ -168,12 +169,13 @@ public partial class MainWindow : Window
                 }
             case "catcar":
                 {
-                    string dir = Directory.Exists(settings.CatcarBepInEx) ? settings.CatcarBepInEx : RadioImport.FindBepInEx();
+                    string dir = RadioImport.Normalize(settings.CatcarBepInEx) ?? RadioImport.FindBepInEx();
                     if (dir == null)
                     {
-                        var d = new Microsoft.Win32.OpenFolderDialog { Title = "CATCAR's BepInEx folder" };
+                        var d = new Microsoft.Win32.OpenFolderDialog { Title = "Pick the CATCAR Pit Crew Playtest game folder" };
                         if (d.ShowDialog(this) != true) return;
-                        dir = d.FolderName;
+                        dir = RadioImport.Normalize(d.FolderName);
+                        if (dir == null) { Flash($"No Radio settings (BepInEx\\config\\catcar.radio.state.txt) under {d.FolderName}."); return; }
                     }
                     try
                     {

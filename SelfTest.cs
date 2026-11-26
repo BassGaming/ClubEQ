@@ -118,6 +118,12 @@ static class SelfTest
         Check(!q.Speakers.First(s => s.Name == "Car 1").Mute && q.Speakers.First(s => s.Name == "Car 2").Mute, "import: synced car plays, the other is muted");
         Check(q.Speakers.Any(s => s.Name == "Portable 7" && Near(s.X, 0, .05f)), "import: portable radio in the garage");
 
+        Check(RadioImport.Normalize(System.IO.Path.Combine(dir, "config")) == dir && RadioImport.Normalize(System.IO.Path.Combine(dir, "config", "catcar.radio.state.txt")) == dir,
+            "import: the config folder or the file itself are accepted");
+        // this machine's game, if any (info only: other machines have no CATCAR)
+        var found = RadioImport.FindBepInEx();
+        Console.WriteLine("info CATCAR found at: " + (found ?? "(none)") + (found != null ? " -> " + RadioImport.Apply(Builtin.Garage(), found) : ""));
+
         string a = Store.ToJson(Builtin.Garage()), b = Store.ToJson(Store.FromJson<Preset>(a));
         Check(a == b, "preset JSON round trip");
 

@@ -19,24 +19,44 @@ public static class RadioImport
     // Garage middle in world space when the log doesn't say (mod log "Corner speakers: ... from the middle (...)").
     static readonly (float X, float Y, float Z) DefaultMid = (-7.81f, -.15f, -345.32f);
 
-    // ...\CATCAR Pit Crew Playtest\BepInEx from the Steam libraries, or null.
+    // ...\CATCAR Pit Crew Playtest\BepInEx from the Steam libraries, or null. Steam's own folder comes from the
+    // registry (here F:\steam; the game sits in a library on G:).
     public static string FindBepInEx()
     {
-        var roots = new List<string> { @"C:\Program Files (x86)\Steam" };
-        try
-        {
-            var vdf = Path.Combine(roots[0], "steamapps", "libraryfolders.vdf");
-            if (File.Exists(vdf))
-                foreach (Match m in Regex.Matches(File.ReadAllText(vdf), "\"path\"\\s*\"([^\"]+)\""))
-                    roots.Add(m.Groups[1].Value.Replace(@"\\", @"\"));
-        }
-        catch { /* fall through to the default library */ }
+        var steams = new List<string> { @"C:\Program Files (x86)\Steam" };
+        try { if (Microsoft.Win32.Registry.GetValue(@"HKEY_CURRENT_USER\Software\Valve\Steam", "SteamPath", null) is string sp) steams.Insert(0, sp.Replace('/', '\\')); }
+        catch { /* no registry: the default folder only */ }
+        var roots = new List<string>(steams);
+        foreach (var st in steams)
+            try
+            {
+                var vdf = Path.Combine(st, "steamapps", "libraryfolders.vdf");
+                if (File.Exists(vdf))
+                    foreach (Match m in Regex.Matches(File.ReadAllText(vdf), "\"path\"\\s*\"([^\"]+)\""))
+                        roots.Add(m.Groups[1].Value.Replace(@"\\", @"\"));
+            }
+            catch { /* next one */ }
         foreach (var r in roots)
-        {
-            var d = Path.Combine(r, "steamapps", "common", "CATCAR Pit Crew Playtest", "BepInEx");
-            if (File.Exists(Path.Combine(d, "config", "catcar.radio.state.txt"))) return d;
-        }
+            if (Normalize(Path.Combine(r, "steamapps", "common", "CATCAR Pit Crew Playtest")) is { } d) return d;
         return null;
+    }
+
+    // The BepInEx folder from whatever was picked: the game folder, BepInEx, BepInEx\config, or the state file itself.
+    public static string Normalize(string picked)
+    {
+        if (string.IsNullOrEmpty(picked)) return null;
+        if (File.Exists(picked)) picked = Path.GetDirectoryName(picked);
+        foreach (var d in new[] { picked, Path.Combine(picked, "BepInEx"), Path.GetDirectoryName(picked) })
+            if (d != null && File.Exists(Path.Combine(d, "config", "catcar.radio.state.txt"))) return d;
+        return null;
+    }
+
+    // The game keeps its log open (and may be writing the state file), so read with sharing.
+    static string ReadShared(string path)
+    {
+        using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        using var rd = new StreamReader(fs);
+        return rd.ReadToEnd();
     }
 
     static float F(string s) => float.Parse(s, Inv);
@@ -52,10 +72,12 @@ public static class RadioImport
     // Returns a one-line summary of what changed. Throws if the state file is missing or unreadable.
     public static string Apply(Preset p, string bepinex)
     {
-        var lines = File.ReadAllLines(Path.Combine(bepinex, "config", "catcar.radio.state.txt"));
+        var state = Path.Combine(bepinex, "config", "catcar.radio.state.txt");
+        if (!File.Exists(state)) throw new FileNotFoundException("No Radio settings at " + state);
+        var lines = ReadShared(state).Split('\n').Select(l => l.TrimEnd('\r')).Where(l => l.Length > 0).ToArray();
         string log = "";
         foreach (var name in new[] { "LogOutput.log", "LogOutput.1.log" })
-            try { log += File.ReadAllText(Path.Combine(bepinex, name)); } catch { /* the game may hold it open or it may not exist */ }
+            try { log += ReadShared(Path.Combine(bepinex, name)); } catch { /* missing: positions stay as they are */ }
         var mid = LastVector(log, @"Corner speakers: walls at [^\n]* from the middle ") ?? DefaultMid;
         var ug = p.Macros.FirstOrDefault(m => m.Name == "Underground");
         var done = new List<string>();
