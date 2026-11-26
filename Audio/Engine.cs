@@ -14,9 +14,10 @@ public sealed class FmodException(string msg) : Exception(msg);
 public sealed class Engine : IDisposable
 {
     const int LatencyMs = 50;
-    // Master 100 % = -12 dB inside: the speakers add up to ~4x the input, and a limiter working all the time squashes
-    // the dynamics and the sense of direction. Turn up Voicemeeter or Windows instead.
-    const float Headroom = .25f;
+    // Master 100 % = the game's loudness: the same sweep measured 19.4 dB hotter in ClubEQ at .25 (CATCAR mixes the
+    // radios at FX -14.4 + Master -5.9 dB), and real music then sat ~10 dB in the limiter, which pumped, dulled the
+    // highs and flattened the 3D. Now the limiter only catches stray peaks. Turn up Voicemeeter or Windows instead.
+    const float Headroom = .0268f;
 
     FMOD.System sys;
     FMOD.Sound rec;
@@ -46,7 +47,8 @@ public sealed class Engine : IDisposable
 
     public string Status { get; private set; } = "Stopped";
     public bool Running => recDriver >= 0;
-    FMOD.DSP_PROCESS_CALLBACK captureCb; // held so the GC can't collect the delegate FMOD calls
+    FMOD.DSP_PROCESS_CALLBACK captureCb, gainCb; // held so the GC can't collect the delegates FMOD calls
+    volatile float outGain = Headroom;
     readonly object capLock = new();
     List<float> captured;
 
@@ -63,6 +65,19 @@ public sealed class Engine : IDisposable
         lock (capLock)
             if (captured != null)
                 for (int i = 0; i < length; i++) { captured.Add(src[i * ich]); captured.Add(src[i * ich + Math.Min(1, ich - 1)]); }
+        return FMOD.RESULT.OK;
+    }
+
+    // The master volume. Our own DSP, not a FADER or a group volume: FMOD counts those into each channel's audibility,
+    // which scales its reverb send, so the room would get the master gain twice against the direct sound (measured).
+    unsafe FMOD.RESULT GainProcess(ref FMOD.DSP_STATE st, uint length, ref FMOD.DSP_BUFFER inb, ref FMOD.DSP_BUFFER outb)
+    {
+        int ich = inb.numchannels, och = outb.numchannels > 0 ? outb.numchannels : ich;
+        var src = (float*)inb.buffer; var dst = (float*)outb.buffer;
+        if (src == null || dst == null) return FMOD.RESULT.OK;
+        float g = outGain;
+        for (int i = 0; i < length; i++)
+            for (int c = 0; c < och; c++) dst[i * och + c] = c < ich ? src[i * ich + c] * g : 0;
         return FMOD.RESULT.OK;
     }
 
@@ -87,8 +102,12 @@ public sealed class Engine : IDisposable
         Ok(sys.getMasterChannelGroup(out master), "master group");
         // Seven speakers playing the same song add up to ~4x the input (~11x with Underground): a limiter keeps the
         // output from clipping. The meter reads before it, so the UI shows when it has to work.
-        Ok(master.getDSP(FMOD.CHANNELCONTROL_DSP_INDEX.FADER, out meter), "master fader");
+        gainCb = GainProcess;
+        var gdesc = new FMOD.DSP_DESCRIPTION { pluginsdkversion = FMOD.CONSTANTS.PLUGIN_SDK_VERSION, name = new byte[32], process = gainCb };
+        System.Text.Encoding.ASCII.GetBytes("clubeq master").CopyTo(gdesc.name, 0);
+        Ok(sys.createDSP(ref gdesc, out meter), "master gain");
         meter.setMeteringEnabled(false, true);
+        Ok(master.addDSP(FMOD.CHANNELCONTROL_DSP_INDEX.HEAD, meter), "add master gain");
         Ok(sys.createDSPByType(FMOD.DSP_TYPE.LIMITER, out var limiter), "limiter");
         limiter.setParameterFloat(0, 80); // release ms: slow enough not to pump
         limiter.setParameterFloat(1, -1); // ceiling dB
@@ -200,7 +219,7 @@ public sealed class Engine : IDisposable
         var zero = new FMOD.VECTOR();
         sys.set3DListenerAttributes(0, ref pos, ref zero, ref fwd, ref up);
         ApplyRoomReverb(p.Reverb);
-        master.setVolume(Math.Max(0, p.Master) * Headroom);
+        outGain = Math.Max(0, p.Master) * Headroom;
         if (!Running) return;
 
         Ok(sys.getRecordPosition(recDriver, out uint rp), "record position");

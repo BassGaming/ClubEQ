@@ -46,9 +46,9 @@ public static class Builtin
     // The garage's AudioReverbZone "GarageReverb" (preset User) as the game reports it (probe/ReverbDump): room -900,
     // roomHF -400, roomLF 0, decay 1.2 s, HF ratio 0.55, reflections -500 @ 8 ms, reverb +100 @ 18 ms, HF ref 5000,
     // LF ref 250, diffusion 100, density 100. Converted: high cut ~6.5 kHz, wet ~-7 dB, early/late 67 %.
-    // In the game it plays 10.2 dB louder than that (sweep measurements against CATCAR at the user's spot, 2026-11-26:
-    // with it, early decay 0.62 s vs 0.63, T20 0.78 vs 0.82, crosstalk and third-octave EQ within 1.6 dB).
-    public const float UnityZoneGain = 10.2f;
+    // Matched against CATCAR by sweeps at two spots (2026-11-26): the room plays 1.8 dB below that. (First fitted as
+    // +10.2 while ClubEQ's master was a group volume of 0.25, which FMOD applies to the reverb a second time: -12 dB.)
+    public const float UnityZoneGain = -1.8f;
     public static RoomReverb GarageReverb()
     {
         var r = RoomReverb.FromI3DL2(-900, -400, 0, 1.2f, .55f, -500, .008f, 100, .018f, 5000, 250, 100, 100);

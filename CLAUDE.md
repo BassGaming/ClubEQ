@@ -80,9 +80,10 @@ session (`U:\OpencodeProjects\catcar`, the Radio mod is `catcar/Radio/`); this r
   - **How Unity feeds the zone**: an AudioSource's filters sit **after the fader** (volume, distance, panning), and
     the reverb send is taken at the fader. The room hears each speaker **unfiltered**, the Underground low-pass and
     distortion only shape the direct sound: that is why the game sounds clearer and like a big garage. With the
-    filters after the fader, the system reverb and its wet level `FromI3DL2(...) + 10.2 dB` (`Builtin.UnityZoneGain`),
-    ClubEQ matched the game at two spots: EDT 0.59-0.61 s vs 0.63, T20 0.80-0.81 vs 0.82, crosstalk within 0.1 dB,
-    third-octave EQ per ear within 1.7 dB (rms 0.6 dB). Before: EDT 0.07 s, EQ off by up to 5 dB.
+    filters after the fader, the system reverb and its wet level `FromI3DL2(...) - 1.8 dB` (`Builtin.UnityZoneGain`;
+    first fitted as +10.2 while the master was a group volume, see Engine), and the master as our own gain DSP,
+    ClubEQ matched the game at two spots: level within 0.1 dB, EDT 0.61 s vs 0.63, T20 0.77-0.78 vs 0.82, crosstalk
+    within 0.1 dB, third-octave EQ per ear within 1.7 dB (ClubEQ ~1 dB more at 5-10 kHz). Before: EDT 0.07 s.
   - Dead ends, removed again: a reverb bus fed by SEND DSPs (its early/late balance differs from the system reverb);
     a second silent channel per speaker as a reverb feed (FMOD scales a channel's send by its parent groups' volume, so
     a silent group silences the send too); fitting FMOD's reverb offline in NRT mode to the zone (didn't converge).
@@ -126,9 +127,12 @@ session (`U:\OpencodeProjects\catcar`, the Radio mod is `catcar/Radio/`); this r
     same frequency. Drift: proportional nudge of the frequency (max ±0.5 %, FMOD's record example uses ±2 % steps,
     audible on music). The chain layout (`Shape`) changing restarts all channels. Per frame: listener, room reverb
     (`System.setReverbProperties(0)`), smoothing (rate 6/s, log for log params, like the mod's `Fx.Update`), 3D attrs,
-    DSP params, meters. Master: volume x0.25 (`Headroom`, -12 dB: master 100 % ≈ input level with the Garage
-    scene), then a `LIMITER` (ceiling -1 dB, release 80 ms) at the head; the output meter reads the master fader before
-    it. The mix is forced to **stereo** (`setSoftwareFormat`), as the game; "Voicemeeter In 3" is a 7.1 device and FMOD
+    DSP params, meters. Master: x0.0268 (`Headroom`: master 100 % = the game's loudness, measured with the same
+    sweep) in our own gain DSP, then a `LIMITER` (ceiling -1 dB, release 80 ms) at the head; the output meter reads the
+    gain DSP. **Never use a group volume or a `FADER` DSP for the master**: FMOD counts those into each channel's
+    audibility, which scales its reverb send, so the room got the master gain twice (at x0.25 it sat 12 dB low; at
+    x0.0268 it vanished). At x0.25 ClubEQ also ran 19 dB hotter than the game and music sat ~10 dB in the limiter:
+    the user heard more bass, dull highs and less 3D. The mix is forced to **stereo** (`setSoftwareFormat`), as the game; "Voicemeeter In 3" is a 7.1 device and FMOD
     would otherwise pan into rear channels the headphones never get. Errors stop the engine and show in the status line.
   - `Dsp.cs`: effect type -> FMOD DSP. High/low-pass = FMOD's classic `LOWPASS`/`HIGHPASS` (what Unity's filters
     are; band A of `MULTIBAND_EQ` only as a fallback), Reverb = `SFXREVERB` with a preset + wet adjust + dry,
@@ -161,7 +165,7 @@ session (`U:\OpencodeProjects\catcar`, the Radio mod is `catcar/Radio/`); this r
 | Car radio: 0.9 m above the car, outside low-pass 500 Hz, volume x1.3; inside (camera within 1.5 m of the cockpit camera) low-pass 22 kHz, `spatialBlend` 0.25 | car speakers + inside profile (zone 0.35 m left, 0.2 m back of the car centre: a guess) |
 | Volumes: station knob x the player's Volume 0.8 (boombox 0.8 -> 0.64, corners 0.6 -> 0.48, cars 0.8 x 1.3 -> 0.83) | speaker Volume |
 | Garage walls from the middle: +x 7.4, -x 7.8, +z 9.6, -z 5.5 m (mod log `Corner speakers: walls at ...`); garage radio fixture at (-1.51, -0.15, -349.52) (log `Radio built on ...`) = (6.3, -4.2) from the middle (0.1.0 had z +4.2, mirrored) | Garage room, boombox at (6.3, 0.75, -4.2) |
-| The garage's only `AudioReverbZone` "GarageReverb" at (-8.00, 1.40, -341.30) (garage middle (-7.81, -0.15, -345.32)), preset **User**, radii 8/12 m, grown by the mod to cover the whole garage (EvenGarageReverb) | `RoomReverb` = FMOD's system reverb, `FromI3DL2` + 10.2 dB (measured), fed by every speaker before its filters |
+| The garage's only `AudioReverbZone` "GarageReverb" at (-8.00, 1.40, -341.30) (garage middle (-7.81, -0.15, -345.32)), preset **User**, radii 8/12 m, grown by the mod to cover the whole garage (EvenGarageReverb) | `RoomReverb` = FMOD's system reverb, `FromI3DL2` - 1.8 dB (measured), fed by every speaker before its filters |
 
 ## Open items
 - The match above holds for the user's settings (garage radio Underground 39 %, corners 2/4 Underground, Car 1) and
