@@ -37,7 +37,7 @@ public partial class App : Application
                 {
                     "--serve" => Measure.Serve(a.Length > 1 ? int.Parse(a[1]) : 8799),
                     "--record" => Measure.RecordCmd(a[1], F(2, 40), a[3]),
-                    "--measure-clubeq" => Measure.MeasureClubEQ(a[1], F(2, 0), F(3, 0), F(4, 0), a.Length > 5 ? a[5] : "Garage", F(6, 1)),
+                    "--measure-clubeq" => Measure.MeasureClubEQ(a[1], F(2, 0), F(3, 0), F(4, 0), a.Length > 5 ? a[5] : "Garage", F(6, 1), output: a.Length > 7 ? a[7] : "Voicemeeter Def"),
                     _ => Measure.Analyze(a[1], a.Length > 2 ? a[2] : null),
                 };
             }

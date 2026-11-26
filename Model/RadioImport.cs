@@ -95,6 +95,7 @@ public static class RadioImport
             if (p.Speakers.FirstOrDefault(s => s.Name == c.Name && s.Kind == SpeakerKind.Car) is { } car)
             {
                 (car.X, car.Y, car.Z, car.Yaw) = (c.X, c.Y, c.Z, c.Yaw);
+                car.P["Delay"] = 0;
                 if (car.Inside != null) (car.Inside.OffsetX, car.Inside.OffsetZ) = (0, 0);
             }
         done.Add("garage reverb, parked cars, ear height 1 m");
@@ -156,7 +157,7 @@ public static class RadioImport
                 }
                 s.X = px; s.Y = id < 0 ? py : Math.Max(py, 0) + .3f; s.Z = pz; s.Yaw = ((yaw + 180) % 360) - 180;
                 s.P["Volume"] = vol;
-                if (!s.P.ContainsKey("Delay")) s.P["Delay"] = Builtin.MirrorOffset(id);
+                s.P["Delay"] = 0; // in the game the speakers play in sync (measured): offsets only comb-filter
                 Use(s, muffle, amt);
             }
             done.Add($"{corners} corner speakers" + (portables > 0 ? $", {portables} portables" : ""));

@@ -103,6 +103,7 @@ public class MacroTarget
 public class RoomReverb
 {
     public bool On = true;
+
     public float DecayTime = 1500, EarlyDelay = 7, LateDelay = 11, HFReference = 5000, HFDecayRatio = 83, Diffusion = 100,
         Density = 100, LowShelfFrequency = 250, LowShelfGain = 0, HighCut = 14500, EarlyLateMix = 96, WetLevel = -8;
 

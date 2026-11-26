@@ -146,7 +146,7 @@ static class SelfTest
         RadioImport.Apply(q2, dir);
         Check(!q2.Speakers.First(s => s.Name == "Car 1").Mute && q2.Speakers.First(s => s.Name == "Car 2").Mute, "import: garage following Car 1 = Car 1 plays the same music");
         Check(q.Speakers.Any(s => s.Name == "Portable 7" && Near(s.X, 0, .05f)), "import: portable radio in the garage");
-        Check(q.Speakers.Where(s => s.Kind == SpeakerKind.Cabinet).Select(s => s.Get("Delay")).Distinct().Count() == 4, "corner speakers each have their own time offset");
+        Check(q.Speakers.All(s => s.Get("Delay") == 0), "import: speakers in sync, as in the game");
 
         Check(RadioImport.Normalize(System.IO.Path.Combine(dir, "config")) == dir && RadioImport.Normalize(System.IO.Path.Combine(dir, "config", "catcar.radio.state.txt")) == dir,
             "import: the config folder or the file itself are accepted");

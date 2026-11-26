@@ -46,6 +46,26 @@ public sealed class Engine : IDisposable
 
     public string Status { get; private set; } = "Stopped";
     public bool Running => recDriver >= 0;
+    FMOD.DSP_PROCESS_CALLBACK captureCb; // held so the GC can't collect the delegate FMOD calls
+    readonly object capLock = new();
+    List<float> captured;
+
+    public void StartCapture() { lock (capLock) captured = new List<float>(); }
+    public float[] StopCapture() { lock (capLock) { var r = captured?.ToArray() ?? Array.Empty<float>(); captured = null; return r; } }
+
+    unsafe FMOD.RESULT CaptureProcess(ref FMOD.DSP_STATE st, uint length, ref FMOD.DSP_BUFFER inb, ref FMOD.DSP_BUFFER outb)
+    {
+        int ich = inb.numchannels, och = outb.numchannels > 0 ? outb.numchannels : ich;
+        var src = (float*)inb.buffer; var dst = (float*)outb.buffer;
+        if (src == null || dst == null) return FMOD.RESULT.OK;
+        for (int i = 0; i < length; i++)
+            for (int c = 0; c < och; c++) dst[i * och + c] = c < ich ? src[i * ich + c] : 0;
+        lock (capLock)
+            if (captured != null)
+                for (int i = 0; i < length; i++) { captured.Add(src[i * ich]); captured.Add(src[i * ich + Math.Min(1, ich - 1)]); }
+        return FMOD.RESULT.OK;
+    }
+
     public float InputLevel { get; private set; }
     public float OutputLevel { get; private set; }
     public float[] Levels { get; private set; } = Array.Empty<float>();
@@ -73,6 +93,12 @@ public sealed class Engine : IDisposable
         limiter.setParameterFloat(0, 80); // release ms: slow enough not to pump
         limiter.setParameterFloat(1, -1); // ceiling dB
         Ok(master.addDSP(FMOD.CHANNELCONTROL_DSP_INDEX.HEAD, limiter), "add limiter");
+        // the final mix, for measurements (passes the sound through untouched; records only while capturing)
+        captureCb = CaptureProcess;
+        var desc = new FMOD.DSP_DESCRIPTION { pluginsdkversion = FMOD.CONSTANTS.PLUGIN_SDK_VERSION, name = new byte[32], process = captureCb };
+        System.Text.Encoding.ASCII.GetBytes("clubeq capture").CopyTo(desc.name, 0);
+        Ok(sys.createDSP(ref desc, out var cap), "capture DSP");
+        Ok(master.addDSP(FMOD.CHANNELCONTROL_DSP_INDEX.HEAD, cap), "add capture");
         Ok(sys.createChannelGroup("speakers", out group), "speakers group");
     }
 
@@ -227,11 +253,13 @@ public sealed class Engine : IDisposable
             // Each speaker a few ms apart, as the mod's mirrors are: same song, but the ear hears separate speakers
             // instead of one phantom source in between.
             v.Ch.setPosition((start + soundLen - Lag(s)) % soundLen, FMOD.TIMEUNIT.PCM);
-            v.Ch.setReverbProperties(0, 1);
+            v.Ch.setReverbProperties(0, 1); // into the room reverb: FMOD's system reverb, as Unity's reverb zone
             v.Ch.setPaused(false); // still held by the paused group
-            // Added at the tail one by one from the last effect, so the signal runs first effect -> last -> 3D panner, as in Unity.
             v.Chain = s.Chain.Select(e => Dsp.Create(sys, e.Type)).ToList();
-            foreach (var dsp in Enumerable.Reverse(v.Chain)) Ok(v.Ch.addDSP(FMOD.CHANNELCONTROL_DSP_INDEX.TAIL, dsp.Handle), "add DSP");
+            // After the fader (volume, distance, panning), in chain order, as Unity wires an AudioSource's filters:
+            // the reverb send is taken at the fader, so the room hears the speaker unfiltered and the filters only
+            // shape the direct sound. Measured in CATCAR (with them before the fader the room was far too dry and dull).
+            foreach (var dsp in v.Chain) Ok(v.Ch.addDSP(FMOD.CHANNELCONTROL_DSP_INDEX.HEAD, dsp.Handle), "add DSP");
             if (v.Ch.getDSP(FMOD.CHANNELCONTROL_DSP_INDEX.HEAD, out v.Meter) == FMOD.RESULT.OK) v.Meter.setMeteringEnabled(false, true);
             voices.Add(v);
         }
@@ -252,7 +280,8 @@ public sealed class Engine : IDisposable
         }
         var cur = v.Cur;
         v.Ch.setMute(s.Mute || (anySolo && !s.Solo));
-        v.Ch.setVolume(Math.Max(0, cur["Volume"]));
+        float vol = Math.Max(0, cur["Volume"]);
+        v.Ch.setVolume(vol);
         var sp = new FMOD.VECTOR { x = s.X, y = s.Y, z = s.Z };
         var zero = new FMOD.VECTOR();
         v.Ch.set3DAttributes(ref sp, ref zero);
@@ -277,11 +306,11 @@ public sealed class Engine : IDisposable
         string key = Store.ToJson(r);
         if (key == reverbKey) return;
         reverbKey = key;
-        var props = r.On
+        var sysProps = r.On
             ? new FMOD.REVERB_PROPERTIES(r.DecayTime, r.EarlyDelay, r.LateDelay, r.HFReference, r.HFDecayRatio, r.Diffusion, r.Density,
                 r.LowShelfFrequency, r.LowShelfGain, r.HighCut, r.EarlyLateMix, r.WetLevel)
             : FMOD.PRESET.OFF();
-        Ok(sys.setReverbProperties(0, ref props), "room reverb");
+        Ok(sys.setReverbProperties(0, ref sysProps), "room reverb");
     }
 
     static float MaxPeak(FMOD.DSP_METERING_INFO mi)

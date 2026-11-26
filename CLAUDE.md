@@ -32,13 +32,10 @@ session (`U:\OpencodeProjects\catcar`, the Radio mod is `catcar/Radio/`); this r
   The game also renders stereo: Windows' default device is Voicemeeter Def (2 ch) and CATCAR's per-app routing
   (registry `PolicyConfig\PropertyStore`) points at Voicemeeter VAIO out7/out8, not In 3. **Voicemeeter In 3** is the
   only 7.1 device and the only one with Equalizer APO + **HeSuVi** (headphone surround, binaural front/back).
-- **Time offsets** (speaker param `Delay`, ms, 0..60 on the slider): each channel starts that much behind. The mod's
-  corner/portable speakers are mirrors that copy the garage radio's `timeSamples` on the main thread while audio runs,
-  so each sits 0..~20 ms off (re-synced only past 50 ms); the user heard that in game as "speakers not 100 % in sync".
-  Sample-exact speakers fuse into one flat phantom source, offsets let the ear pick each one out. Defaults
-  (`Builtin.MirrorOffset`): corners 6/14/3/18 ms, cars 9/12, portables by id, garage radio 0. The import fills them in
-  for speakers that have none. Changing one restarts all channels. Drift control measures on voice 0 and allows for its
-  offset (`lag0`).
+- **Time offsets** (speaker param `Delay`, ms): each channel starts that much behind. **Default 0**: in every normal
+  game recording the speakers arrive in sync (one arrival), and offsets of a few ms made ClubEQ's EQ up to 7 dB wrong
+  (comb filtering). Only with all reverbs off did the game show a spread of a few ms. Changing one restarts all
+  channels; drift control measures on voice 0 and allows for its offset (`lag0`).
 - **Audio probe (2026-11-26, throwaway plugin, 5 dumps in the garage at several spots; removed again):**
   - Unity: 48 kHz, **Stereo**, DSP buffer 1024, no spatializer plugin, AudioListener volume 1, no filters on the
     listener (camera `PlayerCamera/Main Camera`, ears **1.0 m** above the floor: the player is a cat).
@@ -55,24 +52,40 @@ session (`U:\OpencodeProjects\catcar`, the Radio mod is `catcar/Radio/`); this r
     **-7.03 dB**).
   - Cars parked at CarRadio (-5.81, 1.39, -338.44) and (-9.21, 1.39, -338.44) (= (2.0, 1.54, 6.88) and (-1.4, 1.54,
     6.88) from the middle), facing -z, cockpit camera right under the radio. Garage radio source at y 0.37 world.
-  - timeSamples per dump: speakers differ from the garage radio by 0 or ±1024 samples (one DSP block, 21 ms); the
-    sign follows the read order, so the real offsets are inside one block (0..21 ms), as ClubEQ's defaults.
   - The import now also sets the garage reverb, the cars' spots and the ear height, and decides "same music" by
     playlist roots (the user's garage radio follows Car 1: link 1 on station 0).
-- **Measuring** (`Measure.cs`, 2026-11-26): exponential sine sweeps, left input only then right only (6 s each,
-  20 Hz-20 kHz, -10 dBFS). `--serve [8799]` serves `%APPDATA%\ClubEQ\Measure\sweep.wav` for the Radio mod (add
-  `http://127.0.0.1:8799/sweep.wav` as a station; ffmpeg plays it, it loops when it ends; not 8765, the Data API mod uses that); `--record "Voicemeeter Def"
-  <s> <out.wav>` records the game's output (loopback); `--measure-clubeq <out.wav> <x> <z> <yaw> [preset] [y]` plays
-  the sweep into vm5 Browser through ClubEQ's engine and records Voicemeeter Def the same way; `--analyze a.wav [b.wav]`
-  deconvolves into the four impulse responses (L/R in -> L/R out, written as `<a>.ir.wav`), prints third-octave EQ per
-  ear (each relative to its own 250 Hz-8 kHz average), EDT/T20, crosstalk and the arrivals in the first 80 ms, and with
-  two files the differences. Goal: a blind test can't tell CATCAR from ClubEQ, so tune until these match.
-- High/low-pass now use FMOD's classic `LOWPASS`/`HIGHPASS` (what Unity's filters are); the multiband EQ only as a
-  fallback if the DLL refuses them.
-- User A/B (same song, same spot): CATCAR sounds like a larger garage, with better EQ and clarity. The game's mixer
-  is "MainAudioMixer" (sharedassets0) with groups Master, Engines, Engines Exterior, Music, Voice (plus the FX group
-  the mod routes to, not found in that file); what effects sit on them can't be read from the strings. Next step if
-  needed: measure the game (sweep through the Radio mod, loopback-record Voicemeeter Def).
+- **Measuring** (`Measure.cs`): exponential sine sweeps, left input only then right only (6 s each, 20 Hz-20 kHz,
+  -10 dBFS). Commands:
+  - `--serve [8799]` serves `%APPDATA%\ClubEQ\Measure\sweep.wav` (add `http://127.0.0.1:8799/sweep.wav` as a
+    station in the Radio mod; it loops). Not 8765: the Data API mod uses that.
+  - `--record "Voicemeeter Def" <s> <out.wav>` records the game's output (WASAPI loopback). Close ClubEQ and silence
+    the browser first: anything else on that device gets in.
+  - `--measure-clubeq <out.wav> <x> <z> <yaw> [preset] [y]` plays the sweep into vm5 Browser and records ClubEQ's
+    **own final mix inside the engine** (a capture DSP at the master head), so no other sound or device gets in.
+    Recording a device's loopback instead was unreliable (Line 1 drops samples; Voicemeeter Def picks up the game).
+  - `--analyze a.wav [b.wav]` deconvolves into the four impulse responses (L/R in -> L/R out, written as
+    `<a>.ir.wav`), prints third-octave EQ per ear (each relative to its own 250 Hz-8 kHz average), EDT/T20,
+    crosstalk, the arrivals in the first 80 ms, and with two files the differences.
+  - Build the tools with `dotnet build -o <scratch folder>` while ClubEQ runs (the exe in bin is locked then), and
+    never run a command an older exe doesn't know: it opens the GUI instead.
+- **Sandboxed shell vs the user's AppData**: files the shell writes under `%APPDATA%` (e.g. `ClubEQ\Measure`) are not
+  visible to the game, and the `settings.json` the shell reads may be the sandbox's copy, not the one the user's
+  ClubEQ writes. Put files the game must read into the game folder (the probe reads `BepInEx\plugins\clubeq-sweep.wav`).
+- **The game measured (2026-11-26, a throwaway probe plugin `AudioProbe.dll` with F8 dump / F9 states / L zone test,
+  removed from the game afterwards; source only in the session scratchpad):**
+  - F9 states at one spot: all on EDT 0.63 s / T20 0.82 s; reverb **zone off** 0.09 / 0.31; the speakers'
+    `AudioReverbFilter`s off 0.63 / 0.81 (inaudible next to the zone); both off 0.07 / 0.04. The zone is the sound.
+  - L (zone alone): a plain 2D source at volume 1 without filters, zone on vs off. Same decay shape as FMOD's system
+    reverb with the converted values, 7 dB louder.
+  - **How Unity feeds the zone**: an AudioSource's filters sit **after the fader** (volume, distance, panning), and
+    the reverb send is taken at the fader. The room hears each speaker **unfiltered**, the Underground low-pass and
+    distortion only shape the direct sound: that is why the game sounds clearer and like a big garage. With the
+    filters after the fader, the system reverb and its wet level `FromI3DL2(...) + 10.2 dB` (`Builtin.UnityZoneGain`),
+    ClubEQ matched the game at two spots: EDT 0.59-0.61 s vs 0.63, T20 0.80-0.81 vs 0.82, crosstalk within 0.1 dB,
+    third-octave EQ per ear within 1.7 dB (rms 0.6 dB). Before: EDT 0.07 s, EQ off by up to 5 dB.
+  - Dead ends, removed again: a reverb bus fed by SEND DSPs (its early/late balance differs from the system reverb);
+    a second silent channel per speaker as a reverb feed (FMOD scales a channel's send by its parent groups' volume, so
+    a silent group silences the send too); fitting FMOD's reverb offline in NRT mode to the zone (didn't converge).
 - ClubEQ refuses to start when Output is the device it records (`X [loopback]` in, `X` out): it would record itself.
 - The user's `settings.json` never got rewritten after the first launch (presets did). Saving errors now show in the
   status line instead of being swallowed; the cause isn't known yet.
@@ -117,11 +130,11 @@ session (`U:\OpencodeProjects\catcar`, the Radio mod is `catcar/Radio/`); this r
     scene), then a `LIMITER` (ceiling -1 dB, release 80 ms) at the head; the output meter reads the master fader before
     it. The mix is forced to **stereo** (`setSoftwareFormat`), as the game; "Voicemeeter In 3" is a 7.1 device and FMOD
     would otherwise pan into rear channels the headphones never get. Errors stop the engine and show in the status line.
-  - `Dsp.cs`: effect type -> FMOD DSP. High/low-pass = band A of `MULTIBAND_EQ` (LOWPASS_12DB = 1, HIGHPASS_12DB = 4;
-    FMOD 2.03+ dropped the old LOWPASS/HIGHPASS types), Reverb = `SFXREVERB` with a preset + wet adjust + dry,
+  - `Dsp.cs`: effect type -> FMOD DSP. High/low-pass = FMOD's classic `LOWPASS`/`HIGHPASS` (what Unity's filters
+    are; band A of `MULTIBAND_EQ` only as a fallback), Reverb = `SFXREVERB` with a preset + wet adjust + dry,
     Distortion (bypassed at level 0, as the mod), Eq = `THREE_EQ`, Gain = `FADER`, Echo = `ECHO`. Only changed values
-    go to FMOD. DSPs are added at the channel's TAIL from the last effect back, so the signal runs first effect -> last
-    -> 3D panner, as on a Unity AudioSource.
+    go to FMOD. The chain is added **after the channel's fader** (at HEAD, in order), as Unity wires an AudioSource:
+    fader (volume, distance, panning, reverb send) -> first effect -> last.
 - `UI/`: `Theme.xaml` = TrackGlow's theme (`U:\OpencodeProjects\trackglow-desktop\Desktop\Theme\Theme.xaml`, the
   user's other app) + `NeonBrush` #FF3DA8 and `CyanBrush` #3DE8FF. `RoomCanvas` (top-down room, drawn in `OnRender`,
   click/drag/wheel), `Inspector` (right panel built in code from the registry: speaker, macro, or room/you/reverb/
@@ -148,29 +161,11 @@ session (`U:\OpencodeProjects\catcar`, the Radio mod is `catcar/Radio/`); this r
 | Car radio: 0.9 m above the car, outside low-pass 500 Hz, volume x1.3; inside (camera within 1.5 m of the cockpit camera) low-pass 22 kHz, `spatialBlend` 0.25 | car speakers + inside profile (zone 0.35 m left, 0.2 m back of the car centre: a guess) |
 | Volumes: station knob x the player's Volume 0.8 (boombox 0.8 -> 0.64, corners 0.6 -> 0.48, cars 0.8 x 1.3 -> 0.83) | speaker Volume |
 | Garage walls from the middle: +x 7.4, -x 7.8, +z 9.6, -z 5.5 m (mod log `Corner speakers: walls at ...`); garage radio fixture at (-1.51, -0.15, -349.52) (log `Radio built on ...`) = (6.3, -4.2) from the middle (0.1.0 had z +4.2, mirrored) | Garage room, boombox at (6.3, 0.75, -4.2) |
-| The garage's only `AudioReverbZone` "GarageReverb" at (-8.00, 1.40, -341.30) (garage middle (-7.81, -0.15, -345.32)), preset **User**, radii 8/12 m, grown by the mod to cover the whole garage (EvenGarageReverb) | `RoomReverb`, applied to every speaker (values below) |
+| The garage's only `AudioReverbZone` "GarageReverb" at (-8.00, 1.40, -341.30) (garage middle (-7.81, -0.15, -345.32)), preset **User**, radii 8/12 m, grown by the mod to cover the whole garage (EvenGarageReverb) | `RoomReverb` = FMOD's system reverb, `FromI3DL2` + 10.2 dB (measured), fed by every speaker before its filters |
 
 ## Open items
-- **GarageReverb values** (read in game with a throwaway plugin, 2026-11-26): room -900, roomHF -400, roomLF 0,
-  decayTime 1.2 s, decayHFRatio 0.55, reflections -500 @ 0.008 s, reverb +100 @ 0.018 s, HFReference 5000, LFReference
-  250, diffusion 100, density 100. Converted by hand (Unity's own I3DL2 -> FMOD mapping isn't public): decay 1200 ms,
-  early/late delay 8/18 ms, HF decay 55 %, low shelf 250 Hz 0 dB, high cut 4066 Hz (roomHF as a 1-pole low-pass at the
-  HF reference: g = 10^(roomHF/2000), cut = HFRef * g / sqrt(1-g²)), early/late mix 66.6 % (reflections -5 dB vs reverb
-  +1 dB), wet -8 dB (room -9 dB + the louder +1 dB). Still to tune by ear against the game (same song, standing in the
-  middle).
-- **First listen (0.1.0), user:** "3D way less prominent and worse than in catcar, overall pretty different". Their saved
-  preset had all corners at volume 1.0 and master 0.86: the seven speakers summed to ~4x full scale, so the limiter
-  squashed everything all the time (flat dynamics, no sense of direction), plus Car 1's 500 Hz bass close by. Fixed
-  with the -12 dB headroom (and stereo mix, just in case). Not re-heard yet; if it's still flat, next suspects: the
-  per-speaker Room reverb + room reverb washing out the panning (compare with reverbs off), Unity maybe placing the
-  AudioSource filters after its panner instead of before, the listener standing still (in game you move and turn).
-- Car parking spots in the garage are guessed (x ±2.6, z 1.5). Corner and radio spots are the game's.
-- **Still flatter than CATCAR** (user, after the headroom fix, before the import). The import brings the user's real
-  mix (Underground on the radio and two corners, which ClubEQ's defaults didn't have). If it still differs, the way to
-  copy the game exactly is to measure it: play a sine sweep through the Radio mod (it plays any http URL as a station,
-  so serve the sweep from a local HTTP server), loopback-record the game's output device standing at one spot (left
-  only, then right only), deconvolve into a 2x2 impulse response, and add a convolution mode. That captures everything
-  linear (Unity's panning, filters, both reverbs, distances) exactly for that spot and settings; the Underground
-  distortion is the only non-linear part.
-- Unity's spread/panning and FMOD's are both FMOD under the hood, but Unity's AudioSource may add its own 3D level
-  handling; compare by ear.
+- The match above holds for the user's settings (garage radio Underground 39 %, corners 2/4 Underground, Car 1) and
+  their in-game FX volume (-14.4 dB): if they change the FX slider in the game, the game's direct/reverb balance may
+  change. Not heard by the user yet after the fix.
+- Not measured: walking around (only two spots, ~2 m apart, facing the back wall), the car interiors, other mixes.
+- Unity's custom roll-off curve can't be read (`GetCustomCurve` stripped); ClubEQ uses FMOD's inverse roll-off.

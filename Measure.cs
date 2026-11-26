@@ -94,7 +94,7 @@ static class Measure
                     for (int c = 0; c < ch; c++)
                     {
                         int o = p + 8 + (i * ch + c) * bps;
-                        x[i, c] = fmt == 3 ? BitConverter.ToSingle(b, o) : BitConverter.ToInt16(b, o) / 32768f;
+                        x[i, c] = bits == 32 ? BitConverter.ToSingle(b, o) : BitConverter.ToInt16(b, o) / 32768f; // 32-bit = float (also in WAVE_FORMAT_EXTENSIBLE)
                     }
                 return x;
             }
@@ -230,7 +230,18 @@ static class Measure
         double dur = (double)SweepStereo().GetLength(0) / Rate + 1.5;
         FMOD.Channel ch = default;
         bool started = false;
-        var rec = Record(output, dur + 1, () => { if (!started) { ps.playSound(snd, default, false, out ch); started = true; } return Tick(); });
+        // recorded inside the engine (its final mix), so no other sound and no device can get in
+        en.StartCapture();
+        var t0 = sw.Elapsed.TotalSeconds;
+        while (sw.Elapsed.TotalSeconds - t0 < dur + 1)
+        {
+            if (!started) { ps.playSound(snd, default, false, out ch); started = true; }
+            Tick();
+            Thread.Sleep(10);
+        }
+        var flat = en.StopCapture();
+        var rec = new float[flat.Length / 2, 2];
+        for (int i = 0; i < rec.GetLength(0); i++) { rec[i, 0] = flat[2 * i]; rec[i, 1] = flat[2 * i + 1]; }
         snd.release(); ps.close(); ps.release();
         WriteWav(outPath, rec, 32);
         Console.WriteLine($"Wrote {outPath}.");
@@ -238,6 +249,8 @@ static class Measure
     }
 
     // ---------- analysis ----------
+    public static void FftPublic(double[] re, double[] im, bool inverse) => Fft(re, im, inverse);
+
     static void Fft(double[] re, double[] im, bool inverse)
     {
         int n = re.Length;

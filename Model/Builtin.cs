@@ -26,9 +26,6 @@ public static class Builtin
 
     static readonly float Room = Effects.ReverbIndex("Room");
 
-    // The mod's corner and portable speakers are mirrors: they copy the garage radio's play position on the main thread
-    // while the audio runs on, so each lands 0..~20 ms off (fixed until the next re-sync at 50 ms). Spread like that.
-    public static float MirrorOffset(int id) => id switch { -1 => 6, -2 => 14, -3 => 3, -4 => 18, _ => (id * 7 % 19 + 19) % 19 + 1 };
 
     // A corner PA cabinet as the mod builds it: high-pass 35, low-pass 16 k, reverb Room, fully positional from 6 m.
     public static Speaker Corner(string name, float x, float z) => new()
@@ -48,8 +45,16 @@ public static class Builtin
 
     // The garage's AudioReverbZone "GarageReverb" (preset User) as the game reports it (probe/ReverbDump): room -900,
     // roomHF -400, roomLF 0, decay 1.2 s, HF ratio 0.55, reflections -500 @ 8 ms, reverb +100 @ 18 ms, HF ref 5000,
-    // LF ref 250, diffusion 100, density 100. Gives high cut ~6.5 kHz, wet ~-7 dB, early/late 67 %.
-    public static RoomReverb GarageReverb() => RoomReverb.FromI3DL2(-900, -400, 0, 1.2f, .55f, -500, .008f, 100, .018f, 5000, 250, 100, 100);
+    // LF ref 250, diffusion 100, density 100. Converted: high cut ~6.5 kHz, wet ~-7 dB, early/late 67 %.
+    // In the game it plays 10.2 dB louder than that (sweep measurements against CATCAR at the user's spot, 2026-11-26:
+    // with it, early decay 0.62 s vs 0.63, T20 0.78 vs 0.82, crosstalk and third-octave EQ within 1.6 dB).
+    public const float UnityZoneGain = 10.2f;
+    public static RoomReverb GarageReverb()
+    {
+        var r = RoomReverb.FromI3DL2(-900, -400, 0, 1.2f, .55f, -500, .008f, 100, .018f, 5000, 250, 100, 100);
+        r.WetLevel += UnityZoneGain;
+        return r;
+    }
 
     // The two crew cars, parked behind the middle facing the back wall (probe: HubTeamCar / HubTeamCar2 CarRadio at
     // (-5.81, 1.39, -338.44) / (-9.21, 1.39, -338.44), cockpit camera right under the radio). Outside: through the
@@ -57,7 +62,7 @@ public static class Builtin
     public static Speaker[] Cars() => new[] { ("Car 1", 2.0f, false), ("Car 2", -1.4f, true) }.Select(c => new Speaker
     {
         Name = c.Item1, Kind = SpeakerKind.Car, X = c.Item2, Y = 1.54f, Z = 6.88f, Yaw = 180, Mute = c.Item3,
-        P = P(("Volume", .7f * 1.3f), ("MinDistance", 4), ("MaxDistance", 150), ("Spread", 60), ("Level3D", 1), ("Delay", c.Item1 == "Car 1" ? 9 : 12)),
+        P = P(("Volume", .7f * 1.3f), ("MinDistance", 4), ("MaxDistance", 150), ("Spread", 60), ("Level3D", 1)),
         Chain = { Fx("LowPass", ("Cutoff", 500)) },
         Inside = new InsideProfile { OffsetX = 0, OffsetZ = 0, Radius = 1.5f, Values = P(("LowPass.Cutoff", 22000), ("Level3D", .25f)) },
     }).ToArray();
@@ -91,7 +96,6 @@ public static class Builtin
             var (x, z, vol, muffle, amt) = corners[i];
             var c = Corner("Corner " + (i + 1), x, z);
             c.P["Volume"] = vol;
-            c.P["Delay"] = MirrorOffset(-(i + 1));
             c.Macros["Underground"] = new SpeakerMacro { Own = true, On = muffle, Amount = amt };
             p.Speakers.Add(c);
         }
