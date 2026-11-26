@@ -14,6 +14,9 @@ public sealed class FmodException(string msg) : Exception(msg);
 public sealed class Engine : IDisposable
 {
     const int LatencyMs = 50;
+    // Master 100 % = -12 dB inside: the speakers add up to ~4x the input, and a limiter working all the time squashes
+    // the dynamics and the sense of direction. Turn up Voicemeeter or Windows instead.
+    const float Headroom = .25f;
 
     FMOD.System sys;
     FMOD.Sound rec;
@@ -56,6 +59,9 @@ public sealed class Engine : IDisposable
     {
         Ok(FMOD.Factory.System_Create(out sys), "System_Create");
         Ok(sys.setDSPBufferSize(512, 4), "setDSPBufferSize");
+        // Pan for stereo like the game does, whatever the device offers: on a 7.1 device (Voicemeeter In 3 is one) FMOD
+        // would pan into rear channels that the headphones never get, which flattens the 3D picture.
+        Ok(sys.setSoftwareFormat(48000, FMOD.SPEAKERMODE.STEREO, 0), "stereo");
         Ok(sys.init(64, FMOD.INITFLAGS.NORMAL, IntPtr.Zero), "init");
         Ok(sys.set3DSettings(0, 1, 1), "set3DSettings"); // no doppler, metres, normal roll-off
         Ok(sys.getMasterChannelGroup(out master), "master group");
@@ -64,6 +70,7 @@ public sealed class Engine : IDisposable
         Ok(master.getDSP(FMOD.CHANNELCONTROL_DSP_INDEX.FADER, out meter), "master fader");
         meter.setMeteringEnabled(false, true);
         Ok(sys.createDSPByType(FMOD.DSP_TYPE.LIMITER, out var limiter), "limiter");
+        limiter.setParameterFloat(0, 80); // release ms: slow enough not to pump
         limiter.setParameterFloat(1, -1); // ceiling dB
         Ok(master.addDSP(FMOD.CHANNELCONTROL_DSP_INDEX.HEAD, limiter), "add limiter");
         Ok(sys.createChannelGroup("speakers", out group), "speakers group");
@@ -164,7 +171,7 @@ public sealed class Engine : IDisposable
         var zero = new FMOD.VECTOR();
         sys.set3DListenerAttributes(0, ref pos, ref zero, ref fwd, ref up);
         ApplyRoomReverb(p.Reverb);
-        master.setVolume(Math.Max(0, p.Master));
+        master.setVolume(Math.Max(0, p.Master) * Headroom);
         if (!Running) return;
 
         Ok(sys.getRecordPosition(recDriver, out uint rp), "record position");
@@ -207,7 +214,7 @@ public sealed class Engine : IDisposable
         {
             var v = new Voice();
             Ok(sys.playSound(rec, group, true, out v.Ch), "play");
-            v.Ch.setMode(FMOD.MODE._3D_INVERSEROLLOFF);
+            v.Ch.setMode(FMOD.MODE.LOOP_NORMAL | FMOD.MODE._3D | FMOD.MODE._3D_INVERSEROLLOFF);
             v.Ch.setPosition(start, FMOD.TIMEUNIT.PCM);
             v.Ch.setReverbProperties(0, 1);
             v.Ch.setPaused(false); // still held by the paused group

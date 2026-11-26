@@ -56,6 +56,9 @@ sealed class Inspector
             }),
             Button("Remove", () => { p.Speakers.Remove(s); reshaped(); Select(null); }, "BtnDanger")));
 
+        foreach (var m in p.Macros.Where(m => m.Targets.Any(t => t.Matches(s))))
+            ShowSpeakerMacro(s, m);
+
         Add(Heading("Speaker"));
         Add(Text("Name", () => s.Name, v => s.Name = v.Trim().Length > 0 ? v.Trim() : s.Name, changed));
         Add(Choice("Kind", Enum.GetNames<SpeakerKind>(), () => (int)s.Kind, v => s.Kind = (SpeakerKind)v, () => { changed(); reshaped(); }));
@@ -89,6 +92,32 @@ sealed class Inspector
             Add(Button("Add inside zone", () => { s.Inside = new InsideProfile { Values = { ["Level3D"] = .25f } }; reshaped(); Select(s); }));
         }
         else ShowInside(s);
+    }
+
+    // Follow the strip, or this speaker's own on/off and amount (as each speaker in the mod has its own Underground).
+    void ShowSpeakerMacro(Speaker s, Macro m)
+    {
+        Add(Heading(m.Name));
+        s.Macros.TryGetValue(m.Name, out var u);
+        int mode = u == null || !u.Own ? 0 : u.On ? 1 : 2;
+        var seg = new StackPanel { Orientation = Orientation.Horizontal };
+        string[] labels = { $"Follow strip ({(m.On ? $"on {m.Amount * 100:0} %" : "off")})", "On", "Off" };
+        for (int k = 0; k < 3; k++)
+        {
+            int kk = k;
+            var rb = new RadioButton { Content = labels[k], Style = Res<Style>("SegItem"), IsChecked = k == mode, GroupName = "m" + m.GetHashCode() + s.GetHashCode() };
+            rb.Checked += (_, _) =>
+            {
+                if (kk == mode) return;
+                if (!s.Macros.TryGetValue(m.Name, out var x)) s.Macros[m.Name] = x = new SpeakerMacro { Amount = m.Amount };
+                x.Own = kk != 0; x.On = kk == 1;
+                changed(); Select(s);
+            };
+            seg.Children.Add(rb);
+        }
+        Add(new Border { Style = Res<Style>("SegBox"), HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 0, 0, 8), Child = seg });
+        if (u is { Own: true, On: true })
+            Add(Slider("Amount", new ParamDef("Amount", "Amount", 0, 1, .5f), () => u.Amount, v => u.Amount = v, changed));
     }
 
     FrameworkElement EffectCard(Speaker s, int i)
@@ -152,7 +181,13 @@ sealed class Inspector
         Add(new TextBlock { Text = m.Name, Style = Res<Style>("H3") });
         Add(Note("One slider driving many settings. Each line: which speakers, which setting, the value at 0 % and at 100 % of the slider."));
         Add(Wrap(Button("Done", () => Select(null), "BtnPrimary"), Button("Delete macro", () => { p.Macros.Remove(m); reshaped(); Select(null); }, "BtnDanger")));
-        Add(Text("Name", () => m.Name, v => m.Name = v.Trim().Length > 0 ? v.Trim() : m.Name, () => { changed(); reshaped(); }));
+        Add(Text("Name", () => m.Name, v =>
+        {
+            string old = m.Name, name = v.Trim().Length > 0 ? v.Trim() : m.Name;
+            foreach (var sp in p.Speakers)
+                if (sp.Macros.Remove(old, out var u)) sp.Macros[name] = u; // speakers keep their own setting
+            m.Name = name;
+        }, () => { changed(); reshaped(); }));
         Add(Heading("Targets"));
         var addresses = Effects.Addresses().ToArray();
         foreach (var t in m.Targets.ToList())

@@ -125,7 +125,10 @@ public sealed class RoomCanvas : FrameworkElement
                 break;
         }
         dc.Pop();
-        Label(dc, s.Name, new Point(c.X, c.Y + (s.Kind == SpeakerKind.Car ? 2.6 * scale : Math.Max(14, .4 * scale)) + 2), sel ? Accent : Dim);
+        var at = new Point(c.X, c.Y + (s.Kind == SpeakerKind.Car ? 2.6 * scale : Math.Max(14, .4 * scale)) + 2);
+        Label(dc, s.Name, at, sel ? Accent : Dim);
+        var active = Preset.Macros.Where(m => s.Use(m).On && m.Targets.Any(t => t.Matches(s))).Select(m => m.Name.ToUpperInvariant()).ToList();
+        if (active.Count > 0) Label(dc, string.Join(" · ", active), new Point(at.X, at.Y + 13), Neon);
         dc.Pop();
     }
 
@@ -214,6 +217,19 @@ public sealed class RoomCanvas : FrameworkElement
         dragging = null;
         ReleaseMouseCapture();
         if (moved) Committed?.Invoke();
+    }
+
+    // Right-click a speaker: its own switch for the first macro (Underground), like the toggle on each speaker in the mod.
+    protected override void OnMouseRightButtonDown(MouseButtonEventArgs e)
+    {
+        if (HitAt(e.GetPosition(this)) is not Speaker s || Preset.Macros.Count == 0) return;
+        var m = Preset.Macros[0];
+        if (!s.Macros.TryGetValue(m.Name, out var u)) s.Macros[m.Name] = u = new SpeakerMacro { Amount = m.Amount };
+        bool now = s.Use(m).On;
+        u.Own = true; u.On = !now;
+        e.Handled = true;
+        InvalidateVisual();
+        Committed?.Invoke();
     }
 
     protected override void OnMouseWheel(MouseWheelEventArgs e)

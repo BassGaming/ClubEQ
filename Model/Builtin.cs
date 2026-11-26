@@ -27,7 +27,7 @@ public static class Builtin
 
     public static Preset Garage()
     {
-        var p = new Preset { Name = "Garage", Master = .3f }; // 7 speakers add up; leaves headroom before the limiter
+        var p = new Preset { Name = "Garage" };
         // Walls measured by the mod (log "Corner speakers: walls at +x 7.4 -x 7.8 +z 9.6 -z 5.5 m from the middle").
         p.Room = new Room { MinX = -7.8f, MaxX = 7.4f, MinZ = -5.5f, MaxZ = 9.6f, Height = 3, ListenerX = 0, ListenerY = 1.6f, ListenerZ = -1.5f };
         // The garage's AudioReverbZone "GarageReverb" (preset User), converted from the values the game reports (CLAUDE.md).

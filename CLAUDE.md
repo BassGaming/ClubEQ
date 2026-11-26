@@ -39,6 +39,11 @@ session (`U:\OpencodeProjects\catcar`, the Radio mod is `catcar/Radio/`); this r
     the speaker-level params (`Volume`, `MinDistance`, `MaxDistance`, `Spread`, `Level3D`), FMOD's 24 reverb presets
     (checked equal to `FMOD.PRESET` in fmod.cs 2.04). Parameters are addressed as `"Volume"` or `"LowPass.Cutoff"`
     (= the first effect of that type in the chain).
+  - Per-speaker macros: `Speaker.Macros[name]` (`SpeakerMacro`: `Own`, `On`, `Amount`); `Speaker.Use(macro)` gives the
+    speaker's own on/amount when `Own`, else the strip's. The mod has an Underground toggle + slider per speaker; the user
+    needs that. Inspector: "Follow strip / On / Off" + amount per macro that targets the speaker; room view: right-click
+    a speaker toggles its own switch for the first macro, active macros show under its name. Renaming a macro moves the
+    speakers' entries.
   - `Mix.cs`: `Targets(preset, speaker, inside)` = own values, then the macros that are on, then the inside profile.
     Pure; the engine smooths towards it. `IsInside`, `ZonePoint` (zone offset turned by the speaker's yaw).
   - `Builtin.cs`: the Garage preset (numbers below). `Store.cs`: JSON (System.Text.Json, fields, enums as strings),
@@ -49,8 +54,10 @@ session (`U:\OpencodeProjects\catcar`, the Radio mod is `catcar/Radio/`); this r
     same frequency. Drift: proportional nudge of the frequency (max ±0.5 %, FMOD's record example uses ±2 % steps,
     audible on music). The chain layout (`Shape`) changing restarts all channels. Per frame: listener, room reverb
     (`System.setReverbProperties(0)`), smoothing (rate 6/s, log for log params, like the mod's `Fx.Update`), 3D attrs,
-    DSP params, meters. Master: a `LIMITER` (ceiling -1 dB) at the head; the output meter reads the master fader before
-    it. Errors stop the engine and show in the status line.
+    DSP params, meters. Master: volume x0.25 (`Headroom`, -12 dB: master 100 % ≈ input level with the Garage
+    scene), then a `LIMITER` (ceiling -1 dB, release 80 ms) at the head; the output meter reads the master fader before
+    it. The mix is forced to **stereo** (`setSoftwareFormat`), as the game; "Voicemeeter In 3" is a 7.1 device and FMOD
+    would otherwise pan into rear channels the headphones never get. Errors stop the engine and show in the status line.
   - `Dsp.cs`: effect type -> FMOD DSP. High/low-pass = band A of `MULTIBAND_EQ` (LOWPASS_12DB = 1, HIGHPASS_12DB = 4;
     FMOD 2.03+ dropped the old LOWPASS/HIGHPASS types), Reverb = `SFXREVERB` with a preset + wet adjust + dry,
     Distortion (bypassed at level 0, as the mod), Eq = `THREE_EQ`, Gain = `FADER`, Echo = `ECHO`. Only changed values
@@ -92,7 +99,12 @@ session (`U:\OpencodeProjects\catcar`, the Radio mod is `catcar/Radio/`); this r
   HF reference: g = 10^(roomHF/2000), cut = HFRef * g / sqrt(1-g²)), early/late mix 66.6 % (reflections -5 dB vs reverb
   +1 dB), wet -8 dB (room -9 dB + the louder +1 dB). Still to tune by ear against the game (same song, standing in the
   middle).
-- Not heard by the user yet: the whole sound, Underground sweep, the inside-the-car switch, the room view and UI.
+- **First listen (0.1.0), user:** "3D way less prominent and worse than in catcar, overall pretty different". Their saved
+  preset had all corners at volume 1.0 and master 0.86: the seven speakers summed to ~4x full scale, so the limiter
+  squashed everything all the time (flat dynamics, no sense of direction), plus Car 1's 500 Hz bass close by. Fixed
+  with the -12 dB headroom (and stereo mix, just in case). Not re-heard yet; if it's still flat, next suspects: the
+  per-speaker Room reverb + room reverb washing out the panning (compare with reverbs off), Unity maybe placing the
+  AudioSource filters after its panner instead of before, the listener standing still (in game you move and turn).
 - Car parking spots in the garage are guessed (x ±2.6, z 1.5); the boombox spot is approximate.
 - Unity's spread/panning and FMOD's are both FMOD under the hood, but Unity's AudioSource may add its own 3D level
   handling; compare by ear.

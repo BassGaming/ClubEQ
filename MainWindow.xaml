@@ -69,7 +69,7 @@
             <Border x:Name="RoomBorder" Style="{StaticResource Stage}" Padding="0" ClipToBounds="True">
                 <Grid>
                     <ui:RoomCanvas x:Name="Room"/>
-                    <TextBlock Text="drag to move · wheel to turn · click empty floor for the room" Style="{StaticResource Small}"
+                    <TextBlock Text="drag to move · wheel to turn · right-click a speaker: its own Underground on/off · click empty floor for the room" Style="{StaticResource Small}"
                                HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="14,0,0,10" IsHitTestVisible="False" Opacity="0.7"/>
                 </Grid>
             </Border>

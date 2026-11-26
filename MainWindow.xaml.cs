@@ -39,7 +39,7 @@ public partial class MainWindow : Window
 
         insp = new Inspector(InspectorPanel, Changed, Reshaped) { Preset = () => cur, Select = Select, PresetAction = PresetAction };
         Room.SelectionChanged += o => Select(o);
-        Room.Committed += () => { Changed(); if (selected != null && selected is not Macro) insp.Show(selected); };
+        Room.Committed += () => { Changed(); if (selected is not Macro) insp.Show(selected); };
         Room.Level = i => engine?.Levels is { } l && i < l.Length ? l[i] : 0;
         Room.InsideOf = i => engine?.IsInside(i) == true;
 

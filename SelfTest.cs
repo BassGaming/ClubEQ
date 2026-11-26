@@ -81,6 +81,13 @@ static class SelfTest
         Check(Near(Mix.Targets(p, box, false)["LowPass.Cutoff"], 160), "Underground 1 -> 160 Hz");
         Check(Near(Mix.Targets(p, car, false)["LowPass.Cutoff"], 500), "Underground leaves the cars alone");
         ug.On = false;
+        box.Macros["Underground"] = new SpeakerMacro { Own = true, On = true, Amount = 1 };
+        Check(Near(Mix.Targets(p, box, false)["LowPass.Cutoff"], 160), "a speaker's own Underground works with the strip off");
+        var corner = p.Speakers.First(s => s.Kind == SpeakerKind.Cabinet);
+        Check(Near(Mix.Targets(p, corner, false)["LowPass.Cutoff"], 16000), "...and leaves the other speakers alone");
+        ug.On = true; box.Macros["Underground"].On = false;
+        Check(Near(Mix.Targets(p, box, false)["LowPass.Cutoff"], 12000), "a speaker's own off beats the strip's on");
+        ug.On = false; box.Macros.Clear();
 
         var r = p.Room;
         Check(p.Speakers.Where(s => s.Kind == SpeakerKind.Cabinet).All(s => s.X > r.MinX && s.X < r.MaxX && s.Z > r.MinZ && s.Z < r.MaxZ), "corner speakers inside the walls");

@@ -19,11 +19,12 @@ public static class Mix
         }
         foreach (var m in p.Macros)
         {
-            if (!m.On) continue;
+            var (on, amount) = s.Use(m);
+            if (!on) continue;
             foreach (var t in m.Targets)
             {
                 if (!t.Matches(s) || !v.TryGetValue(t.Param, out var cur)) continue;
-                float x = t.At(m.Amount);
+                float x = t.At(amount);
                 v[t.Param] = t.Multiply ? cur * x : x;
             }
         }

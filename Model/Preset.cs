@@ -34,6 +34,12 @@ public class Speaker
     public Dictionary<string, float> P = new();
     public List<Effect> Chain = new();
     public InsideProfile Inside; // null = no inside zone
+    // Per macro name: this speaker's own on/off and amount (the mod has an Underground toggle and slider per speaker).
+    // Missing or Own = false: follows the macro strip.
+    public Dictionary<string, SpeakerMacro> Macros = new();
+
+    public (bool On, float Amount) Use(Macro m) =>
+        Macros.TryGetValue(m.Name, out var u) && u.Own ? (u.On, u.Amount) : (m.On, m.Amount);
 
     public float Get(string name) => P.TryGetValue(name, out var v) ? v : Effects.SpeakerParam(name).Default;
 }
@@ -44,6 +50,12 @@ public class InsideProfile
 {
     public float OffsetX, OffsetZ, Radius = 1.5f;
     public Dictionary<string, float> Values = new();
+}
+
+public class SpeakerMacro
+{
+    public bool Own, On;
+    public float Amount = .5f;
 }
 
 public class Effect
