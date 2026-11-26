@@ -1,0 +1,88 @@
+<Window x:Class="ClubEQ.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ui="clr-namespace:ClubEQ.UI"
+        Title="ClubEQ" Width="1280" Height="800" MinWidth="560" MinHeight="480"
+        Background="{StaticResource Bg}" Foreground="{StaticResource TextBrush}"
+        FontFamily="{StaticResource BodyFont}" UseLayoutRounding="True" SnapsToDevicePixels="True">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Top bar -->
+        <Border Grid.Row="0" Background="{StaticResource SideBg}" BorderBrush="{StaticResource BorderBrush1}" BorderThickness="0,0,0,1" Padding="18,12">
+            <WrapPanel VerticalAlignment="Center">
+                <StackPanel Orientation="Horizontal" Margin="0,4,28,4" VerticalAlignment="Center">
+                    <TextBlock Text="CLUB" FontFamily="{StaticResource DisplayFont}" FontSize="26" FontWeight="Black" Foreground="{StaticResource TextBrush}"/>
+                    <TextBlock Text="EQ" FontFamily="{StaticResource DisplayFont}" FontSize="26" FontWeight="Black" Foreground="{StaticResource NeonBrush}">
+                        <TextBlock.Effect><DropShadowEffect Color="#FF3DA8" BlurRadius="16" ShadowDepth="0" Opacity="0.9"/></TextBlock.Effect>
+                    </TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,4,16,4" Width="200">
+                    <TextBlock Text="PRESET" Style="{StaticResource Label}"/>
+                    <ComboBox x:Name="PresetBox"/>
+                </StackPanel>
+                <StackPanel Margin="0,4,16,4" Width="220">
+                    <TextBlock Text="INPUT" Style="{StaticResource Label}"/>
+                    <ComboBox x:Name="InputBox"/>
+                </StackPanel>
+                <StackPanel Margin="0,4,16,4" Width="220">
+                    <TextBlock Text="OUTPUT" Style="{StaticResource Label}"/>
+                    <ComboBox x:Name="OutputBox"/>
+                </StackPanel>
+                <StackPanel Margin="0,4,16,4" Width="170">
+                    <TextBlock x:Name="MasterLabel" Text="MASTER" Style="{StaticResource Label}"/>
+                    <Slider x:Name="MasterSlider" Minimum="0" Maximum="1.5" Value="1"/>
+                </StackPanel>
+                <StackPanel Margin="0,4,16,4" Width="120" VerticalAlignment="Bottom">
+                    <TextBlock Text="IN / OUT" Style="{StaticResource Label}"/>
+                    <Border Height="6" CornerRadius="3" Background="#2A265C" Margin="0,2,0,4">
+                        <Border x:Name="InMeter" HorizontalAlignment="Left" Width="0" CornerRadius="3" Background="{StaticResource CyanBrush}"/>
+                    </Border>
+                    <Border Height="6" CornerRadius="3" Background="#2A265C">
+                        <Border x:Name="OutMeter" HorizontalAlignment="Left" Width="0" CornerRadius="3" Background="{StaticResource NeonBrush}" ToolTip="Output before the limiter: red = over full scale, the limiter is catching it"/>
+                    </Border>
+                </StackPanel>
+                <Button x:Name="PowerButton" Style="{StaticResource BtnPrimary}" Content="Start" MinWidth="96" Margin="0,4,0,4" VerticalAlignment="Bottom"/>
+            </WrapPanel>
+        </Border>
+
+        <!-- Macro strip -->
+        <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" Padding="18,12,18,0">
+            <StackPanel x:Name="MacroStrip" Orientation="Horizontal"/>
+        </ScrollViewer>
+
+        <!-- Room + inspector; the inspector moves under the room in a narrow window -->
+        <Grid x:Name="Main" Grid.Row="2" Margin="18,12,18,12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition x:Name="RoomCol" Width="*"/>
+                <ColumnDefinition x:Name="InspCol" Width="400"/>
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition x:Name="RoomRow" Height="*"/>
+                <RowDefinition x:Name="InspRow" Height="0"/>
+            </Grid.RowDefinitions>
+            <Border x:Name="RoomBorder" Style="{StaticResource Stage}" Padding="0" ClipToBounds="True">
+                <Grid>
+                    <ui:RoomCanvas x:Name="Room"/>
+                    <TextBlock Text="drag to move · wheel to turn · click empty floor for the room" Style="{StaticResource Small}"
+                               HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="14,0,0,10" IsHitTestVisible="False" Opacity="0.7"/>
+                </Grid>
+            </Border>
+            <Border x:Name="InspBorder" Grid.Column="1" Style="{StaticResource Card}" Margin="12,0,0,0" Padding="18,14,10,14">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,8,0">
+                    <StackPanel x:Name="InspectorPanel"/>
+                </ScrollViewer>
+            </Border>
+        </Grid>
+
+        <!-- Status line -->
+        <Border Grid.Row="3" Background="{StaticResource SideBg}" BorderBrush="{StaticResource BorderBrush1}" BorderThickness="0,1,0,0" Padding="18,6">
+            <TextBlock x:Name="StatusText" Style="{StaticResource Small}" Text="Stopped" TextTrimming="CharacterEllipsis"/>
+        </Border>
+    </Grid>
+</Window>

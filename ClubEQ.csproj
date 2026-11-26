@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <PlatformTarget>x64</PlatformTarget>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>false</SelfContained>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <RootNamespace>ClubEQ</RootNamespace>
+    <ApplicationIcon></ApplicationIcon>
+    <Version>0.1.0</Version>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- FMOD Core API (not committed, see README): the C# wrapper and the native DLL. -->
+    <None Include="fmod\fmod.dll" CopyToOutputDirectory="PreserveNewest" Link="fmod.dll" Condition="Exists('fmod\fmod.dll')" />
+  </ItemGroup>
+  <Target Name="CheckFmod" BeforeTargets="BeforeBuild" Condition="!Exists('fmod\fmod.cs') Or !Exists('fmod\fmod.dll')">
+    <Error Text="FMOD missing: put fmod.dll (api\core\lib\x64) and fmod.cs, fmod_dsp.cs, fmod_errors.cs (api\core\inc) from the FMOD Engine download into the fmod folder." />
+  </Target>
+</Project>
