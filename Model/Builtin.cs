@@ -31,7 +31,16 @@ public static class Builtin
         // Walls measured by the mod (log "Corner speakers: walls at +x 7.4 -x 7.8 +z 9.6 -z 5.5 m from the middle").
         p.Room = new Room { MinX = -7.8f, MaxX = 7.4f, MinZ = -5.5f, MaxZ = 9.6f, Height = 3, ListenerX = 0, ListenerY = 1.6f, ListenerZ = -1.5f };
         // The garage's AudioReverbZone "GarageReverb" (preset User), converted from the values the game reports (CLAUDE.md).
-        p.Reverb = new RoomReverb();
+        // Game: room -900, roomHF -400, roomLF 0, decay 1.2 s, HF ratio 0.55, reflections -500 @ 8 ms, reverb +100 @ 18 ms,
+        // HF ref 5000, LF ref 250, diffusion 100, density 100.
+        p.Reverb = new RoomReverb
+        {
+            DecayTime = 1200, EarlyDelay = 8, LateDelay = 18, HFReference = 5000, HFDecayRatio = 55, Diffusion = 100, Density = 100,
+            LowShelfFrequency = 250, LowShelfGain = 0,
+            HighCut = 4066,      // roomHF -4 dB at 5 kHz as a 1-pole low-pass
+            EarlyLateMix = 66.6f, // reflections -5 dB vs reverb +1 dB
+            WetLevel = -8,        // room -9 dB + the louder part (+1 dB)
+        };
 
         // Boombox on its crate, back-row tile 9 (tile grid 10 x 7 at 1.4 m). Station knob 0.8 x Volume 0.8.
         p.Speakers.Add(new Speaker

@@ -82,17 +82,16 @@ session (`U:\OpencodeProjects\catcar`, the Radio mod is `catcar/Radio/`); this r
 | Car radio: 0.9 m above the car, outside low-pass 500 Hz, volume x1.3; inside (camera within 1.5 m of the cockpit camera) low-pass 22 kHz, `spatialBlend` 0.25 | car speakers + inside profile (zone 0.35 m left, 0.2 m back of the car centre: a guess) |
 | Volumes: station knob x the player's Volume 0.8 (boombox 0.8 -> 0.64, corners 0.6 -> 0.48, cars 0.8 x 1.3 -> 0.83) | speaker Volume |
 | Garage walls from the middle: +x 7.4, -x 7.8, +z 9.6, -z 5.5 m (mod log `Corner speakers: walls at ...`); tile grid 10 x 7 at 1.4 m, the radio on back-row tile 9 | Garage room, boombox at (6.3, 0.75, 4.2) (approx.) |
-| The garage's only `AudioReverbZone` "GarageReverb" at (-8.00, 1.40, -341.30) (garage middle (-7.81, -0.15, -345.32)), preset **User**, radii 8/12 m, grown by the mod to cover the whole garage (EvenGarageReverb) | `RoomReverb`, applied to every speaker. **Still FMOD's Generic values as a placeholder**: see Open items |
+| The garage's only `AudioReverbZone` "GarageReverb" at (-8.00, 1.40, -341.30) (garage middle (-7.81, -0.15, -345.32)), preset **User**, radii 8/12 m, grown by the mod to cover the whole garage (EvenGarageReverb) | `RoomReverb`, applied to every speaker (values below) |
 
 ## Open items
-- **GarageReverb values**: a throwaway BepInEx plugin (`ReverbDump.dll` in the game's `BepInEx\plugins`, source was in
-  the catcar session's scratchpad) logs `REVERBDUMP ...` lines with every `AudioReverbZone` property once the garage
-  loads. Read them from `G:\SteamLibrary\steamapps\common\CATCAR Pit Crew Playtest\BepInEx\LogOutput.log`, convert to
-  `RoomReverb` (decayTime s -> ms, reflectionsDelay/reverbDelay s -> ms, decayHFRatio x100, HFReference, LFReference ->
-  low shelf Hz, roomLF mB/100 -> low shelf dB, roomHF -> high cut: g = 10^(roomHF/2000), cut = HFRef * g / sqrt(1-g²),
-  early/late mix from reflections vs reverb levels, wet = room/100 + the louder of the two in dB), put them in
-  `Builtin.Garage`, then delete `ReverbDump.dll` from the game. Tune by ear against the game (same song, standing in
-  the middle).
+- **GarageReverb values** (read in game with a throwaway plugin, 2026-11-26): room -900, roomHF -400, roomLF 0,
+  decayTime 1.2 s, decayHFRatio 0.55, reflections -500 @ 0.008 s, reverb +100 @ 0.018 s, HFReference 5000, LFReference
+  250, diffusion 100, density 100. Converted by hand (Unity's own I3DL2 -> FMOD mapping isn't public): decay 1200 ms,
+  early/late delay 8/18 ms, HF decay 55 %, low shelf 250 Hz 0 dB, high cut 4066 Hz (roomHF as a 1-pole low-pass at the
+  HF reference: g = 10^(roomHF/2000), cut = HFRef * g / sqrt(1-g²)), early/late mix 66.6 % (reflections -5 dB vs reverb
+  +1 dB), wet -8 dB (room -9 dB + the louder +1 dB). Still to tune by ear against the game (same song, standing in the
+  middle).
 - Not heard by the user yet: the whole sound, Underground sweep, the inside-the-car switch, the room view and UI.
 - Car parking spots in the garage are guessed (x ±2.6, z 1.5); the boombox spot is approximate.
 - Unity's spread/panning and FMOD's are both FMOD under the hood, but Unity's AudioSource may add its own 3D level
