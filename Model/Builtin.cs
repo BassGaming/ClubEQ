@@ -5,7 +5,7 @@ using System.Linq;
 namespace ClubEQ.Model;
 
 // The built-in presets. Every number comes from the CATCAR Radio mod (Radio/Speakers.cs Fx, Radio/RadioPlugin.cs) and
-// the game's garage, see CLAUDE.md "Where the numbers come from".
+// the game's garage, measured from CATCAR and its Radio mod (see the project notes).
 public static class Builtin
 {
     public static Preset[] All() => new[] { Garage() };

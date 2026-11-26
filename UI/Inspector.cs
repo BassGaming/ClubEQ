@@ -224,7 +224,7 @@ sealed class Inspector
         Add(new TextBlock { Text = p.Name, Style = Res<Style>("H3") });
         Add(Note("Click a speaker in the room to edit it. Drag \"YOU\" to move around, the wheel turns you."));
         Add(Wrap(
-            Button("Save as…", () => PresetAction("save as")), Button("Rename", () => PresetAction("rename")),
+            Button("Save", () => PresetAction("save")), Button("Save as…", () => PresetAction("save as")), Button("Rename", () => PresetAction("rename")),
             Button("Export", () => PresetAction("export")), Button("Import", () => PresetAction("import")),
             Button("Reset", () => PresetAction("reset"), tip: "Back to the built-in version (built-in presets only)"),
             Button("Delete", () => PresetAction("delete"), "BtnDanger")));

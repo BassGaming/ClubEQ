@@ -154,13 +154,26 @@ public partial class MainWindow : Window
     {
         switch (what)
         {
+            case "save":
+                try { Store.SavePreset(cur); Flash($"Saved \"{cur.Name}\"."); } catch (Exception e) { Flash("Saving failed: " + e.Message); }
+                break;
             case "save as":
                 {
-                    var name = Prompt.Ask(this, "Save as a new preset", cur.Name + " 2");
+                    var name = Prompt.Ask(this, "Save as a preset", cur.Name + " 2")?.Trim();
                     if (string.IsNullOrWhiteSpace(name)) return;
+                    // file names ignore case on Windows, so "garage" would overwrite Garage.json
+                    var old = presets.FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
+                    if (ReferenceEquals(old, cur)) { PresetAction("save"); return; }
+                    if (old != null)
+                    {
+                        if (MessageBox.Show(this, $"A preset \"{old.Name}\" exists. Overwrite it?", "ClubEQ", MessageBoxButton.YesNo) != MessageBoxResult.Yes) return;
+                        Store.DeletePreset(old.Name);
+                    }
                     var copy = Store.FromJson<Preset>(Store.ToJson(cur));
-                    copy.Name = Unique(name.Trim());
-                    presets.Add(copy); Store.SavePreset(copy); LoadPreset(copy);
+                    copy.Name = name;
+                    int at = old != null ? presets.IndexOf(old) : presets.Count;
+                    if (old != null) presets[at] = copy; else presets.Add(copy);
+                    Store.SavePreset(copy); LoadPreset(copy);
                     break;
                 }
             case "rename":
@@ -231,7 +244,7 @@ public partial class MainWindow : Window
     string Unique(string name)
     {
         string n = name; int i = 2;
-        while (presets.Any(p => p.Name == n && !ReferenceEquals(p, cur))) n = $"{name} {i++}";
+        while (presets.Any(p => string.Equals(p.Name, n, StringComparison.OrdinalIgnoreCase) && !ReferenceEquals(p, cur))) n = $"{name} {i++}";
         return n;
     }
 
