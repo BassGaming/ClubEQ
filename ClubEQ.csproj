@@ -12,7 +12,7 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <RootNamespace>ClubEQ</RootNamespace>
     <ApplicationIcon>Assets\ClubEQ.ico</ApplicationIcon>
-    <Version>0.1.0</Version>
+    <Version>0.1.1</Version>
   </PropertyGroup>
   <ItemGroup>
     <Resource Include="Assets\ClubEQ.ico" />
