@@ -129,7 +129,8 @@ session (`U:\OpencodeProjects\catcar`, the Radio mod is `catcar/Radio/`); this r
     (`System.setReverbProperties(0)`), smoothing (rate 6/s, log for log params, like the mod's `Fx.Update`), 3D attrs,
     DSP params, meters. Master: x0.0268 (`Headroom`: master 100 % = the game's loudness, measured with the same
     sweep) in our own gain DSP, then a `LIMITER` (ceiling -1 dB, release 80 ms) at the head; the output meter reads the
-    gain DSP. **Never use a group volume or a `FADER` DSP for the master**: FMOD counts those into each channel's
+    gain DSP (`Preset.Limiter` bypasses the limiter; the UI master is a dB slider -40..+24 over `Preset.Master`, and
+    the top bar has L/R meters with peak hold and a latching LIMIT/CLIP chip). **Never use a group volume or a `FADER` DSP for the master**: FMOD counts those into each channel's
     audibility, which scales its reverb send, so the room got the master gain twice (at x0.25 it sat 12 dB low; at
     x0.0268 it vanished). At x0.25 ClubEQ also ran 19 dB hotter than the game and music sat ~10 dB in the limiter:
     the user heard more bass, dull highs and less 3D. The mix is forced to **stereo** (`setSoftwareFormat`), as the game; "Voicemeeter In 3" is a 7.1 device and FMOD

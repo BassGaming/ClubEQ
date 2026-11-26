@@ -22,7 +22,7 @@ public sealed class Engine : IDisposable
     FMOD.System sys;
     FMOD.Sound rec;
     FMOD.ChannelGroup master, group;
-    FMOD.DSP meter;
+    FMOD.DSP meter, limiter;
     int recDriver = -1, rate, recChannels;
     uint soundLen; // in samples (frames)
 
@@ -108,7 +108,7 @@ public sealed class Engine : IDisposable
         Ok(sys.createDSP(ref gdesc, out meter), "master gain");
         meter.setMeteringEnabled(false, true);
         Ok(master.addDSP(FMOD.CHANNELCONTROL_DSP_INDEX.HEAD, meter), "add master gain");
-        Ok(sys.createDSPByType(FMOD.DSP_TYPE.LIMITER, out var limiter), "limiter");
+        Ok(sys.createDSPByType(FMOD.DSP_TYPE.LIMITER, out limiter), "limiter");
         limiter.setParameterFloat(0, 80); // release ms: slow enough not to pump
         limiter.setParameterFloat(1, -1); // ceiling dB
         Ok(master.addDSP(FMOD.CHANNELCONTROL_DSP_INDEX.HEAD, limiter), "add limiter");
@@ -220,6 +220,7 @@ public sealed class Engine : IDisposable
         sys.set3DListenerAttributes(0, ref pos, ref zero, ref fwd, ref up);
         ApplyRoomReverb(p.Reverb);
         outGain = Math.Max(0, p.Master) * Headroom;
+        limiter.setBypass(!p.Limiter);
         if (!Running) return;
 
         Ok(sys.getRecordPosition(recDriver, out uint rp), "record position");

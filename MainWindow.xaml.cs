@@ -53,7 +53,10 @@ public partial class MainWindow : Window
         PresetBox.SelectionChanged += (_, _) => { if (!loading && PresetBox.SelectedIndex >= 0) { SaveNow(); LoadPreset(presets[PresetBox.SelectedIndex]); } };
         InputBox.SelectionChanged += (_, _) => { if (loading) return; settings.Input = InputBox.SelectedItem as string ?? ""; SaveSettings(); if (engine?.Running == true) Start(); };
         OutputBox.SelectionChanged += (_, _) => { if (loading) return; settings.Output = OutputBox.SelectedItem as string ?? ""; SaveSettings(); if (engine?.Running == true) Start(); else SetOutput(); };
-        MasterSlider.ValueChanged += (_, _) => { if (loading) return; cur.Master = (float)MasterSlider.Value; MasterLabel.Text = $"MASTER {cur.Master * 100:0} %"; Changed(); };
+        MasterSlider.ValueChanged += (_, _) => { MasterLabel.Text = MasterText(MasterSlider.Value); if (loading) return; cur.Master = FromDb(MasterSlider.Value); Changed(); };
+        MasterLabel.MouseLeftButtonDown += (_, e) => { if (e.ClickCount == 2) MasterSlider.Value = 0; };
+        LimiterBox.Click += (_, _) => { cur.Limiter = LimiterBox.IsChecked == true; Changed(); };
+        ClipChip.MouseLeftButtonDown += (_, _) => clipped = limited = false;
         PowerButton.Click += (_, _) => { if (engine?.Running == true) { engine.Stop(); UpdatePower(); } else Start(); };
 
         saveSoon.Tick += (_, _) => SaveNow();
@@ -129,8 +132,9 @@ public partial class MainWindow : Window
         settings.Preset = p.Name;
         PresetBox.ItemsSource = presets.Select(x => x.Name).ToList();
         PresetBox.SelectedIndex = presets.IndexOf(p);
-        MasterSlider.Value = p.Master;
-        MasterLabel.Text = $"MASTER {p.Master * 100:0} %";
+        MasterSlider.Value = ToDb(p.Master);
+        MasterLabel.Text = MasterText(MasterSlider.Value);
+        LimiterBox.IsChecked = p.Limiter;
         loading = false;
         Room.Preset = p;
         Select(null);
@@ -303,10 +307,46 @@ public partial class MainWindow : Window
         engine.Update(cur, dt);
         if (was != engine.Running) UpdatePower();
         InMeter.Width = 120 * Math.Clamp(engine.InputLevel, 0, 1);
-        OutMeter.Width = 120 * Math.Clamp(engine.OutputLevel, 0, 1);
-        OutMeter.Background = Res<Brush>(engine.OutputLevel > 1 ? "LiveBrush" : "NeonBrush");
+        Meters(engine.OutputLR, dt);
         Room.InvalidateVisual();
         StatusText.Text = t < noteUntil ? note : engine.Status;
+    }
+
+    // ---------- master and output meters ----------
+    const double MinDb = -40, MeterLo = -48, MeterHi = 6, MeterW = 150;
+    static double ToDb(float m) => m <= 0 ? MinDb : Math.Max(MinDb, 20 * Math.Log10(m));
+    static float FromDb(double d) => d <= MinDb ? 0 : (float)Math.Pow(10, d / 20);
+    static string MasterText(double d) => d <= MinDb ? "MASTER OFF" : $"MASTER {d:+0.0;-0.0;0.0} dB";
+    static double Db(float lin) => lin > 0 ? 20 * Math.Log10(lin) : -200;
+    static double MeterX(double db) => MeterW * Math.Clamp((db - MeterLo) / (MeterHi - MeterLo), 0, 1);
+
+    readonly double[] hold = { -200, -200 }, holdAge = { 0, 0 };
+    bool clipped, limited;
+    static readonly Brush ChipOff = Freeze(new SolidColorBrush(Color.FromRgb(0x2A, 0x26, 0x5C)));
+    static Brush Freeze(Brush b) { b.Freeze(); return b; }
+
+    void Meters((float L, float R) lr, float dt)
+    {
+        double[] now = { Db(lr.L), Db(lr.R) };
+        var bars = new[] { OutL, OutR }; var ticks = new[] { HoldL, HoldR };
+        for (int c = 0; c < 2; c++)
+        {
+            // peak hold: 1.5 s, then falls at 20 dB/s
+            holdAge[c] += dt;
+            if (now[c] >= hold[c]) { hold[c] = now[c]; holdAge[c] = 0; }
+            else if (holdAge[c] > 1.5) hold[c] = Math.Max(now[c], hold[c] - 20 * dt);
+            bars[c].Width = MeterX(now[c]);
+            bars[c].Background = Res<Brush>(now[c] > 0 ? "LiveBrush" : now[c] > -1 ? "WarnBrush" : "NeonBrush");
+            ticks[c].Margin = new Thickness(Math.Max(0, MeterX(hold[c]) - 2), 0, 0, 0);
+            ticks[c].Visibility = hold[c] > MeterLo ? Visibility.Visible : Visibility.Collapsed;
+        }
+        double peak = Math.Max(hold[0], hold[1]);
+        PeakText.Text = peak > -100 ? $"PEAK {peak:+0.0;-0.0;0.0} dB" : "IN / OUT";
+        // before the limiter: over 0 dBFS clips without it; with it, over its -1 dB ceiling it is turning the sound down
+        if (Math.Max(now[0], now[1]) > (cur.Limiter ? -1 : 0)) { if (cur.Limiter) limited = true; else clipped = true; }
+        ClipText.Text = clipped ? "CLIP" : limited ? "LIMIT" : "CLEAN";
+        ClipChip.Background = clipped ? Res<Brush>("LiveBrush") : limited ? Res<Brush>("WarnBrush") : ChipOff;
+        ClipText.Foreground = Res<Brush>(clipped || limited ? "TextBrush" : "MutedBrush");
     }
 
     void Status(string s) { note = s; noteUntil = clock.Elapsed.TotalSeconds + 8; StatusText.Text = s; }

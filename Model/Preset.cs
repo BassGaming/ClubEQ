@@ -10,6 +10,7 @@ public class Preset
 {
     public string Name = "New preset";
     public float Master = 1;
+    public bool Limiter = true; // off: peaks over full scale clip at the output
     public Room Room = new();
     public RoomReverb Reverb = new();
     public List<Speaker> Speakers = new();

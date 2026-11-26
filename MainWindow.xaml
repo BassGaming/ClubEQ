@@ -34,18 +34,36 @@
                     <TextBlock Text="OUTPUT" Style="{StaticResource Label}"/>
                     <ComboBox x:Name="OutputBox"/>
                 </StackPanel>
-                <StackPanel Margin="0,4,16,4" Width="170">
+                <StackPanel Margin="0,4,16,4" Width="190">
                     <TextBlock x:Name="MasterLabel" Text="MASTER" Style="{StaticResource Label}"/>
-                    <Slider x:Name="MasterSlider" Minimum="0" Maximum="1.5" Value="1"/>
+                    <Slider x:Name="MasterSlider" Minimum="-40" Maximum="24" Value="0" SmallChange="0.5" LargeChange="3"
+                            ToolTip="0 dB = as loud as CATCAR (measured). Double-click the label for 0 dB."/>
+                    <CheckBox x:Name="LimiterBox" Style="{StaticResource Switch}" Content="Limiter" Margin="0,4,0,0" HorizontalAlignment="Left"
+                              ToolTip="On: peaks over -1 dBFS are turned down instead of clipping. Off: nothing touches the sound, peaks over 0 dBFS clip."/>
                 </StackPanel>
-                <StackPanel Margin="0,4,16,4" Width="120" VerticalAlignment="Bottom">
-                    <TextBlock Text="IN / OUT" Style="{StaticResource Label}"/>
-                    <Border Height="6" CornerRadius="3" Background="#2A265C" Margin="0,2,0,4">
-                        <Border x:Name="InMeter" HorizontalAlignment="Left" Width="0" CornerRadius="3" Background="{StaticResource CyanBrush}"/>
+                <StackPanel Margin="0,4,16,4" Width="150" VerticalAlignment="Bottom">
+                    <DockPanel>
+                        <Border x:Name="ClipChip" DockPanel.Dock="Right" CornerRadius="999" Padding="7,1" Background="#2A265C" Cursor="Hand"
+                                ToolTip="Lights when the output went over full scale (CLIP) or the limiter had to work (LIMIT). Click to reset.">
+                            <TextBlock x:Name="ClipText" Text="CLEAN" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource MutedBrush}"/>
+                        </Border>
+                        <TextBlock x:Name="PeakText" Text="IN / OUT" Style="{StaticResource Label}"/>
+                    </DockPanel>
+                    <Border Height="5" CornerRadius="2" Background="#2A265C" Margin="0,3,0,3" ToolTip="Input">
+                        <Border x:Name="InMeter" HorizontalAlignment="Left" Width="0" CornerRadius="2" Background="{StaticResource CyanBrush}"/>
                     </Border>
-                    <Border Height="6" CornerRadius="3" Background="#2A265C">
-                        <Border x:Name="OutMeter" HorizontalAlignment="Left" Width="0" CornerRadius="3" Background="{StaticResource NeonBrush}" ToolTip="Output before the limiter: red = over full scale, the limiter is catching it"/>
-                    </Border>
+                    <Grid x:Name="OutMeters" ToolTip="Output left / right before the limiter, -48 to +6 dBFS; the line is 0 dBFS">
+                        <Grid.RowDefinitions><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
+                        <Border Height="5" CornerRadius="2" Background="#2A265C" Margin="0,0,0,2">
+                            <Grid><Border x:Name="OutL" HorizontalAlignment="Left" Width="0" CornerRadius="2" Background="{StaticResource NeonBrush}"/>
+                                  <Border x:Name="HoldL" HorizontalAlignment="Left" Width="2" Background="{StaticResource TextBrush}"/></Grid>
+                        </Border>
+                        <Border Grid.Row="1" Height="5" CornerRadius="2" Background="#2A265C">
+                            <Grid><Border x:Name="OutR" HorizontalAlignment="Left" Width="0" CornerRadius="2" Background="{StaticResource NeonBrush}"/>
+                                  <Border x:Name="HoldR" HorizontalAlignment="Left" Width="2" Background="{StaticResource TextBrush}"/></Grid>
+                        </Border>
+                        <Border Grid.RowSpan="2" Width="1" HorizontalAlignment="Left" Margin="133,-1,0,-1" Background="{StaticResource WarnBrush}" IsHitTestVisible="False"/>
+                    </Grid>
                 </StackPanel>
                 <Button x:Name="PowerButton" Style="{StaticResource BtnPrimary}" Content="Start" MinWidth="96" Margin="0,4,0,4" VerticalAlignment="Bottom"/>
             </WrapPanel>

@@ -19,5 +19,7 @@ You stand in the room and can walk around, sit in a car, move speakers and chang
   mouse wheel to turn (Shift = finer). Drag **YOU** to walk around; drag yourself into a car's dashed circle to sit in it.
 - Click empty floor for you, the room reverb, the room size and the preset (save as, rename, export, import, reset).
 - Everything saves by itself to `%APPDATA%\ClubEQ`.
-- Master 100 % plays as loud as CATCAR does. The output meter turns red when the limiter catches peaks: lower the
-  master and turn up Voicemeeter or Windows instead, since a limiter at work dulls the sound.
+- Master 0 dB plays as loud as CATCAR measured with the same sweep; it goes to +24 dB (double-click its label for 0 dB).
+  The L/R output meters read before the limiter (line = 0 dBFS, white tick = peak hold). The chip shows LIMIT when the
+  limiter had to work and CLIP when the limiter is off and a peak went over 0 dBFS; click it to reset. A limiter at
+  work dulls the sound, so turn up Voicemeeter or Windows instead of the master when it lights up a lot.
