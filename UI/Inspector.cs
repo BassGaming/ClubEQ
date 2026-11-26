@@ -239,6 +239,8 @@ sealed class Inspector
         Add(Slider("Z (forward)", new ParamDef("Z", "Z", r.MinZ, r.MaxZ, 0, "m"), () => r.ListenerZ, v => r.ListenerZ = v, changed));
         Add(Slider("Ear height", new ParamDef("Y", "Ear height", .3f, 3, 1.6f, "m"), () => r.ListenerY, v => r.ListenerY = v, changed));
         Add(Slider("Facing", new ParamDef("Yaw", "Facing", -180, 180, 0, "°"), () => r.ListenerYaw, v => r.ListenerYaw = v, changed));
+        Add(Slider("Front/back cue", new ParamDef("RearShade", "Front/back cue", 0, 12, 6, "dB"), () => r.RearShade, v => r.RearShade = v, changed));
+        Add(Note("Speakers behind you lose some treble, as your ears do in a real room. The game has no such cue: 0 dB sounds exactly like CATCAR."));
 
         Add(Heading("Room reverb"));
         var rv = p.Reverb;

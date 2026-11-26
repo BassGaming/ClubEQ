@@ -10,7 +10,8 @@ public class Preset
 {
     public string Name = "New preset";
     public float Master = 1;
-    public bool Limiter = true; // off: peaks over full scale clip at the output
+    public bool Limiter = true;
+    public MasterEq Eq = new(); // off: peaks over full scale clip at the output
     public Room Room = new();
     public RoomReverb Reverb = new();
     public List<Speaker> Speakers = new();
@@ -21,6 +22,17 @@ public class Room
 {
     public float MinX = -5, MaxX = 5, MinZ = -5, MaxZ = 5, Height = 3;
     public float ListenerX, ListenerY = 1.6f, ListenerZ, ListenerYaw; // yaw in degrees, 0 = facing +z
+    // Front/back cue, not in the game: a speaker behind the listener loses up to this many dB above ~3.5 kHz on its
+    // direct sound, as the outer ear shades sound from behind. Plain stereo panning sounds the same front and back.
+    public float RearShade = 6;
+}
+
+// The master graphic EQ: ten peaking bands, one octave apart.
+public class MasterEq
+{
+    public static readonly float[] Freqs = { 31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000 };
+    public bool On = true;
+    public float[] Gains = new float[10]; // dB
 }
 
 public enum SpeakerKind { Boombox, Cabinet, Car, Generic }

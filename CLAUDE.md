@@ -168,6 +168,18 @@ session (`U:\OpencodeProjects\catcar`, the Radio mod is `catcar/Radio/`); this r
 | Garage walls from the middle: +x 7.4, -x 7.8, +z 9.6, -z 5.5 m (mod log `Corner speakers: walls at ...`); garage radio fixture at (-1.51, -0.15, -349.52) (log `Radio built on ...`) = (6.3, -4.2) from the middle (0.1.0 had z +4.2, mirrored) | Garage room, boombox at (6.3, 0.75, -4.2) |
 | The garage's only `AudioReverbZone` "GarageReverb" at (-8.00, 1.40, -341.30) (garage middle (-7.81, -0.15, -345.32)), preset **User**, radii 8/12 m, grown by the mod to cover the whole garage (EvenGarageReverb) | `RoomReverb` = FMOD's system reverb, `FromI3DL2` - 1.8 dB (measured), fed by every speaker before its filters |
 
+## Extras beyond the game (2026-11-26)
+- **Master EQ** (`Preset.Eq`, `MasterEq`): ten peaking bands 31 Hz-16 kHz, Q 1.4, two `MULTIBAND_EQ` DSPs first on
+  the master (before the gain DSP, limiter and capture). Opened with the EQ pill; flat and on, it leaves the measured
+  match unchanged.
+- **Front/back cue** (`Room.RearShade`, dB, default 6; "Front/back cue" under You): a high shelf at 3.5 kHz, last on
+  each speaker's direct sound, cutting by `RearShade x behind x Level3D` (`behind` = 0 beside/in front, 1 straight
+  behind). Stereo panning (FMOD's and Unity's) sounds the same front and back; in the game the user turns the
+  camera, which ClubEQ's static listener can't. 0 = exactly the game (measured: unchanged match).
+- **Loudness**: the user matched CATCAR by ear at Master **+8.7 dB, limiter off**, Firefox and YouTube at 100 %.
+- **Icon**: `tools/make-icon.py` (Pillow) draws `Assets/ClubEQ.ico`/`.png` in TrackGlow's tile style with glowing EQ
+  bars; the exe (`ApplicationIcon`) and the window use it.
+
 ## Open items
 - The match above holds for the user's settings (garage radio Underground 39 %, corners 2/4 Underground, Car 1) and
   their in-game FX volume (-14.4 dB): if they change the FX slider in the game, the game's direct/reverb balance may

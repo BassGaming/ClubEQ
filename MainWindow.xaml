@@ -2,7 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:ui="clr-namespace:ClubEQ.UI"
-        Title="ClubEQ" Width="1280" Height="800" MinWidth="560" MinHeight="480"
+        Title="ClubEQ" Icon="Assets/ClubEQ.ico" Width="1280" Height="800" MinWidth="560" MinHeight="480"
         Background="{StaticResource Bg}" Foreground="{StaticResource TextBrush}"
         FontFamily="{StaticResource BodyFont}" UseLayoutRounding="True" SnapsToDevicePixels="True">
     <Grid>
@@ -17,7 +17,12 @@
         <Border Grid.Row="0" Background="{StaticResource SideBg}" BorderBrush="{StaticResource BorderBrush1}" BorderThickness="0,0,0,1" Padding="18,12">
             <WrapPanel VerticalAlignment="Center">
                 <StackPanel Orientation="Horizontal" Margin="0,4,28,4" VerticalAlignment="Center">
-                    <TextBlock Text="CLUB" FontFamily="{StaticResource DisplayFont}" FontSize="26" FontWeight="Black" Foreground="{StaticResource TextBrush}"/>
+                    <TextBlock Text="CLUB" FontFamily="{StaticResource DisplayFont}" FontSize="26" FontWeight="Black">
+                        <TextBlock.Foreground>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,0"><GradientStop Color="#C59BFF" Offset="0"/><GradientStop Color="#8B6BFF" Offset="1"/></LinearGradientBrush>
+                        </TextBlock.Foreground>
+                        <TextBlock.Effect><DropShadowEffect Color="#9B6BFF" BlurRadius="18" ShadowDepth="0" Opacity="1"/></TextBlock.Effect>
+                    </TextBlock>
                     <TextBlock Text="EQ" FontFamily="{StaticResource DisplayFont}" FontSize="26" FontWeight="Black" Foreground="{StaticResource NeonBrush}">
                         <TextBlock.Effect><DropShadowEffect Color="#FF3DA8" BlurRadius="16" ShadowDepth="0" Opacity="0.9"/></TextBlock.Effect>
                     </TextBlock>
@@ -65,14 +70,31 @@
                         <Border Grid.RowSpan="2" Width="1" HorizontalAlignment="Left" Margin="133,-1,0,-1" Background="{StaticResource WarnBrush}" IsHitTestVisible="False"/>
                     </Grid>
                 </StackPanel>
+                <ToggleButton x:Name="EqButton" Style="{StaticResource Pill}" Content="EQ" Margin="0,4,12,4" VerticalAlignment="Bottom" ToolTip="Show the master EQ"/>
                 <Button x:Name="PowerButton" Style="{StaticResource BtnPrimary}" Content="Start" MinWidth="96" Margin="0,4,0,4" VerticalAlignment="Bottom"/>
             </WrapPanel>
         </Border>
 
         <!-- Macro strip -->
-        <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" Padding="18,12,18,0">
-            <StackPanel x:Name="MacroStrip" Orientation="Horizontal"/>
-        </ScrollViewer>
+        <StackPanel Grid.Row="1">
+            <!-- Master EQ, opened with the EQ pill -->
+            <Border x:Name="EqPanel" Visibility="Collapsed" Style="{StaticResource Card}" Margin="18,12,18,0" Padding="14,10">
+                <DockPanel>
+                    <StackPanel DockPanel.Dock="Left" Width="120" Margin="0,0,16,0">
+                        <TextBlock Text="MASTER EQ" Style="{StaticResource Label}"/>
+                        <CheckBox x:Name="EqOn" Style="{StaticResource Switch}" Content="On" Margin="0,8,0,8" HorizontalAlignment="Left"/>
+                        <Button x:Name="EqFlat" Style="{StaticResource BtnSmall}" Content="Flat" HorizontalAlignment="Left"/>
+                        <TextBlock Text="±12 dB. Double-click a band for 0." Style="{StaticResource Small}" TextWrapping="Wrap" Margin="0,8,0,0"/>
+                    </StackPanel>
+                    <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                        <StackPanel x:Name="EqBands" Orientation="Horizontal"/>
+                    </ScrollViewer>
+                </DockPanel>
+            </Border>
+            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" Padding="18,12,18,0">
+                <StackPanel x:Name="MacroStrip" Orientation="Horizontal"/>
+            </ScrollViewer>
+        </StackPanel>
 
         <!-- Room + inspector; the inspector moves under the room in a narrow window -->
         <Grid x:Name="Main" Grid.Row="2" Margin="18,12,18,12">

@@ -57,6 +57,10 @@ public partial class MainWindow : Window
         MasterLabel.MouseLeftButtonDown += (_, e) => { if (e.ClickCount == 2) MasterSlider.Value = 0; };
         LimiterBox.Click += (_, _) => { cur.Limiter = LimiterBox.IsChecked == true; Changed(); };
         ClipChip.MouseLeftButtonDown += (_, _) => clipped = limited = false;
+        EqButton.Click += (_, _) => EqPanel.Visibility = EqButton.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+        EqOn.Click += (_, _) => { cur.Eq.On = EqOn.IsChecked == true; Changed(); };
+        EqFlat.Click += (_, _) => { foreach (var sl in eqSliders) sl.Value = 0; };
+        BuildEq();
         PowerButton.Click += (_, _) => { if (engine?.Running == true) { engine.Stop(); UpdatePower(); } else Start(); };
 
         saveSoon.Tick += (_, _) => SaveNow();
@@ -135,6 +139,10 @@ public partial class MainWindow : Window
         MasterSlider.Value = ToDb(p.Master);
         MasterLabel.Text = MasterText(MasterSlider.Value);
         LimiterBox.IsChecked = p.Limiter;
+        p.Eq ??= new MasterEq();
+        if (p.Eq.Gains == null || p.Eq.Gains.Length != MasterEq.Freqs.Length) p.Eq.Gains = new float[MasterEq.Freqs.Length];
+        EqOn.IsChecked = p.Eq.On;
+        for (int i = 0; i < eqSliders.Count; i++) eqSliders[i].Value = p.Eq.Gains[i];
         loading = false;
         Room.Preset = p;
         Select(null);
@@ -311,6 +319,36 @@ public partial class MainWindow : Window
         Room.InvalidateVisual();
         StatusText.Text = t < noteUntil ? note : engine.Status;
     }
+
+    // ---------- master EQ ----------
+    readonly List<Slider> eqSliders = new();
+
+    void BuildEq()
+    {
+        for (int i = 0; i < MasterEq.Freqs.Length; i++)
+        {
+            int band = i;
+            float f = MasterEq.Freqs[i];
+            var value = new TextBlock { Text = "0", Style = Res<Style>("Small"), HorizontalAlignment = HorizontalAlignment.Center };
+            var sl = new Slider { Style = Res<Style>("VSlider"), Minimum = -12, Maximum = 12, Value = 0, Height = 110, SmallChange = .5, LargeChange = 3, ToolTip = $"{FreqText(f)}Hz" };
+            sl.ValueChanged += (_, _) =>
+            {
+                value.Text = sl.Value.ToString("+0.0;-0.0;0");
+                if (loading) return;
+                cur.Eq.Gains[band] = (float)Math.Round(sl.Value, 1);
+                Changed();
+            };
+            sl.MouseDoubleClick += (_, _) => sl.Value = 0;
+            eqSliders.Add(sl);
+            var col = new StackPanel { Width = 46 };
+            col.Children.Add(value);
+            col.Children.Add(sl);
+            col.Children.Add(new TextBlock { Text = FreqText(f), Style = Res<Style>("Label"), HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 4, 0, 0) });
+            EqBands.Children.Add(col);
+        }
+    }
+
+    static string FreqText(float f) => f >= 1000 ? $"{f / 1000:0.#}k" : $"{f:0}";
 
     // ---------- master and output meters ----------
     const double MinDb = -40, MeterLo = -48, MeterHi = 6, MeterW = 150;

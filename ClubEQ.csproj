@@ -11,9 +11,12 @@
     <LangVersion>latest</LangVersion>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <RootNamespace>ClubEQ</RootNamespace>
-    <ApplicationIcon></ApplicationIcon>
+    <ApplicationIcon>Assets\ClubEQ.ico</ApplicationIcon>
     <Version>0.1.0</Version>
   </PropertyGroup>
+  <ItemGroup>
+    <Resource Include="Assets\ClubEQ.ico" />
+  </ItemGroup>
   <ItemGroup>
     <!-- FMOD Core API (not committed, see README): the C# wrapper and the native DLL. -->
     <None Include="fmod\fmod.dll" CopyToOutputDirectory="PreserveNewest" Link="fmod.dll" Condition="Exists('fmod\fmod.dll')" />

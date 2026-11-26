@@ -543,6 +543,42 @@
         </Setter>
     </Style>
 
+    <!-- Vertical EQ band: a line at 0 dB, the fill runs from the bottom -->
+    <Style x:Key="VSlider" TargetType="Slider">
+        <Setter Property="Orientation" Value="Vertical"/>
+        <Setter Property="IsMoveToPointEnabled" Value="True"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Slider">
+                    <Grid HorizontalAlignment="Center" Width="22">
+                        <Border Width="6" CornerRadius="3" Background="#2A265C"/>
+                        <Border Height="2" Width="16" Background="{StaticResource BorderBrush2}" VerticalAlignment="Center"/>
+                        <Track x:Name="PART_Track" IsDirectionReversed="True">
+                            <Track.DecreaseRepeatButton>
+                                <RepeatButton Command="Slider.DecreaseLarge" Focusable="False">
+                                    <RepeatButton.Template>
+                                        <ControlTemplate TargetType="RepeatButton">
+                                            <Border Width="6" CornerRadius="3" Background="{StaticResource PrimaryBrush}"/>
+                                        </ControlTemplate>
+                                    </RepeatButton.Template>
+                                </RepeatButton>
+                            </Track.DecreaseRepeatButton>
+                            <Track.IncreaseRepeatButton>
+                                <RepeatButton Command="Slider.IncreaseLarge" Focusable="False">
+                                    <RepeatButton.Template>
+                                        <ControlTemplate TargetType="RepeatButton"><Border Background="Transparent"/></ControlTemplate>
+                                    </RepeatButton.Template>
+                                </RepeatButton>
+                            </Track.IncreaseRepeatButton>
+                            <Track.Thumb><Thumb Style="{StaticResource SliderThumb}"/></Track.Thumb>
+                        </Track>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- Colour temperature bar (Live > Try a flag > Light): the whole track shows the colours. -->
     <Style x:Key="LightSlider" TargetType="Slider">
         <Setter Property="Height" Value="40"/>

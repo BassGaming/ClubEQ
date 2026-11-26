@@ -23,6 +23,8 @@ public sealed class Engine : IDisposable
     FMOD.Sound rec;
     FMOD.ChannelGroup master, group;
     FMOD.DSP meter, limiter;
+    readonly FMOD.DSP[] eq = new FMOD.DSP[2]; // the master EQ: 2 x 5 bands
+    string eqKey = "";
     int recDriver = -1, rate, recChannels;
     uint soundLen; // in samples (frames)
 
@@ -31,6 +33,7 @@ public sealed class Engine : IDisposable
         public FMOD.Channel Ch;
         public List<Dsp> Chain = new();
         public FMOD.DSP Meter;
+        public FMOD.DSP Rear; // the front/back cue (Room.RearShade), last on the direct sound
         public Dictionary<string, float> Cur = new();
         public bool Inside;
     }
@@ -102,6 +105,18 @@ public sealed class Engine : IDisposable
         Ok(sys.getMasterChannelGroup(out master), "master group");
         // Seven speakers playing the same song add up to ~4x the input (~11x with Underground): a limiter keeps the
         // output from clipping. The meter reads before it, so the UI shows when it has to work.
+        // The master EQ, first on the mix (before the gain, the limiter and the capture)
+        for (int i = 0; i < eq.Length; i++)
+        {
+            Ok(sys.createDSPByType(FMOD.DSP_TYPE.MULTIBAND_EQ, out eq[i]), "master EQ");
+            for (int b = 0; b < 5; b++)
+            {
+                eq[i].setParameterInt(b * 4, (int)FMOD.DSP_MULTIBAND_EQ_FILTER_TYPE.PEAKING);
+                eq[i].setParameterFloat(b * 4 + 1, MasterEq.Freqs[i * 5 + b]);
+                eq[i].setParameterFloat(b * 4 + 2, 1.4f); // one octave wide
+            }
+            Ok(master.addDSP(FMOD.CHANNELCONTROL_DSP_INDEX.HEAD, eq[i]), "add master EQ");
+        }
         gainCb = GainProcess;
         var gdesc = new FMOD.DSP_DESCRIPTION { pluginsdkversion = FMOD.CONSTANTS.PLUGIN_SDK_VERSION, name = new byte[32], process = gainCb };
         System.Text.Encoding.ASCII.GetBytes("clubeq master").CopyTo(gdesc.name, 0);
@@ -187,6 +202,7 @@ public sealed class Engine : IDisposable
         {
             v.Ch.stop();
             foreach (var d in v.Chain) d.Release();
+            if (v.Rear.hasHandle()) v.Rear.release();
         }
         voices.Clear();
         started = false;
@@ -221,6 +237,7 @@ public sealed class Engine : IDisposable
         ApplyRoomReverb(p.Reverb);
         outGain = Math.Max(0, p.Master) * Headroom;
         limiter.setBypass(!p.Limiter);
+        ApplyEq(p.Eq);
         if (!Running) return;
 
         Ok(sys.getRecordPosition(recDriver, out uint rp), "record position");
@@ -280,12 +297,38 @@ public sealed class Engine : IDisposable
             // the reverb send is taken at the fader, so the room hears the speaker unfiltered and the filters only
             // shape the direct sound. Measured in CATCAR (with them before the fader the room was far too dry and dull).
             foreach (var dsp in v.Chain) Ok(v.Ch.addDSP(FMOD.CHANNELCONTROL_DSP_INDEX.HEAD, dsp.Handle), "add DSP");
+            Ok(sys.createDSPByType(FMOD.DSP_TYPE.MULTIBAND_EQ, out v.Rear), "rear shade");
+            v.Rear.setParameterInt(0, (int)FMOD.DSP_MULTIBAND_EQ_FILTER_TYPE.HIGHSHELF);
+            v.Rear.setParameterFloat(1, 3500);
+            v.Rear.setParameterFloat(2, .7f);
+            Ok(v.Ch.addDSP(FMOD.CHANNELCONTROL_DSP_INDEX.HEAD, v.Rear), "add rear shade");
             if (v.Ch.getDSP(FMOD.CHANNELCONTROL_DSP_INDEX.HEAD, out v.Meter) == FMOD.RESULT.OK) v.Meter.setMeteringEnabled(false, true);
             voices.Add(v);
         }
         lastPlay = (start + soundLen - lag0) % soundLen; played = recorded - target - lag0; latencyAvg = target + lag0;
         started = true;
         group.setPaused(false);
+    }
+
+    // 0 beside or in front of the listener, 1 straight behind (on the floor plan)
+    static float Behind(Room r, Speaker s)
+    {
+        float dx = s.X - r.ListenerX, dz = s.Z - r.ListenerZ, d = MathF.Sqrt(dx * dx + dz * dz);
+        if (d < .01f) return 0;
+        float yaw = r.ListenerYaw * MathF.PI / 180;
+        return Math.Max(0, -(dx * MathF.Sin(yaw) + dz * MathF.Cos(yaw)) / d);
+    }
+
+    void ApplyEq(MasterEq e)
+    {
+        string key = e.On + string.Join(",", e.Gains);
+        if (key == eqKey) return;
+        eqKey = key;
+        for (int i = 0; i < eq.Length; i++)
+        {
+            eq[i].setBypass(!e.On);
+            for (int b = 0; b < 5; b++) eq[i].setParameterFloat(b * 4 + 3, Math.Clamp(e.Gains.ElementAtOrDefault(i * 5 + b), -30, 20));
+        }
     }
 
     void ApplySpeaker(Preset p, Speaker s, Voice v, float k, bool anySolo, int i)
@@ -308,6 +351,7 @@ public sealed class Engine : IDisposable
         v.Ch.set3DMinMaxDistance(Math.Max(.01f, cur["MinDistance"]), Math.Max(cur["MinDistance"] + .01f, cur["MaxDistance"]));
         v.Ch.set3DSpread(Math.Clamp(cur["Spread"], 0, 360));
         v.Ch.set3DLevel(Math.Clamp(cur["Level3D"], 0, 1));
+        v.Rear.setParameterFloat(3, -p.Room.RearShade * Behind(p.Room, s) * Math.Clamp(cur["Level3D"], 0, 1));
         var seen = new HashSet<string>();
         for (int j = 0; j < s.Chain.Count; j++)
         {
