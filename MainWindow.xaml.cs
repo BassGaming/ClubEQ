@@ -52,7 +52,7 @@ public partial class MainWindow : Window
 
         PresetBox.SelectionChanged += (_, _) => { if (!loading && PresetBox.SelectedIndex >= 0) { SaveNow(); LoadPreset(presets[PresetBox.SelectedIndex]); } };
         InputBox.SelectionChanged += (_, _) => { if (loading) return; settings.Input = InputBox.SelectedItem as string ?? ""; SaveSettings(); if (engine?.Running == true) Start(); };
-        OutputBox.SelectionChanged += (_, _) => { if (loading) return; settings.Output = OutputBox.SelectedItem as string ?? ""; SaveSettings(); SetOutput(); };
+        OutputBox.SelectionChanged += (_, _) => { if (loading) return; settings.Output = OutputBox.SelectedItem as string ?? ""; SaveSettings(); if (engine?.Running == true) Start(); else SetOutput(); };
         MasterSlider.ValueChanged += (_, _) => { if (loading) return; cur.Master = (float)MasterSlider.Value; MasterLabel.Text = $"MASTER {cur.Master * 100:0} %"; Changed(); };
         PowerButton.Click += (_, _) => { if (engine?.Running == true) { engine.Stop(); UpdatePower(); } else Start(); };
 
@@ -100,13 +100,20 @@ public partial class MainWindow : Window
     {
         if (engine == null) return;
         if (InputBox.SelectedIndex < 0) { Status("Pick an input device first."); return; }
+        // Recording a device's loopback while playing into that same device records ClubEQ's own output again and
+        // again: every sound smeared with repeats, no direction left. Refuse it.
+        string i = (InputBox.SelectedItem as string ?? "").Replace("[loopback]", "").Trim(), o = OutputBox.SelectedItem as string ?? "";
+        if (i.Length > 0 && i.Equals(o.Trim(), StringComparison.OrdinalIgnoreCase))
+        {
+            if (engine.Running) engine.Stop();
+            Status($"Output is the same device ClubEQ records ({o}): it would hear itself. Pick your headphones or another Voicemeeter input as Output.");
+            UpdatePower();
+            return;
+        }
         try
         {
             SetOutput();
             engine.Start(InputBox.SelectedIndex);
-            string i = settings.Input.Replace("[loopback]", "").Trim(), o = settings.Output;
-            if (i.Length > 0 && (o.Contains(i, StringComparison.OrdinalIgnoreCase) || i.Contains(o, StringComparison.OrdinalIgnoreCase)))
-                Flash("Input and output look like the same device: that can feed back. Pick your headphones as output.");
         }
         catch (Exception e) { Status("Start: " + e.Message); }
         UpdatePower();
@@ -281,7 +288,8 @@ public partial class MainWindow : Window
 
     void SaveSettings()
     {
-        try { Store.SaveSettings(settings); } catch { /* next change retries */ }
+        try { Store.SaveSettings(settings); }
+        catch (Exception e) { Status($"Saving settings to {Store.Home} failed: {e.Message}"); } // next change retries
     }
 
     // ---------- every frame ----------

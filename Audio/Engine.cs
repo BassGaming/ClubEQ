@@ -203,8 +203,13 @@ public sealed class Engine : IDisposable
         for (int i = 0; i < voices.Count; i++) ApplySpeaker(p, p.Speakers[i], voices[i], k, anySolo, i);
 
         if (meter.getMeteringInfo(IntPtr.Zero, out var mi) == FMOD.RESULT.OK)
+        {
             OutputLevel = MaxPeak(mi);
+            if (mi.numchannels >= 2) OutputLR = (mi.peaklevel[0], mi.peaklevel[1]);
+        }
     }
+
+    public (float L, float R) OutputLR { get; private set; }
 
     void StartVoices(Preset p, uint rp)
     {

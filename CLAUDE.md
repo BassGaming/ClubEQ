@@ -27,6 +27,14 @@ session (`U:\OpencodeProjects\catcar`, the Radio mod is `catcar/Radio/`); this r
 - The strip also goes straight to the headphones in Voicemeeter, so the dry sound plays on top unless the user turns
   that strip's A bus off while ClubEQ runs. ClubEQ's output must not be "vm5 Browser" itself (feedback; the app warns
   when input and output names match).
+- **Panning is measured correct** (`ClubEQ.exe --pan "vm5 Browser"`: one dry speaker 5 m right/left/front/back, prints
+  L/R peaks): right = R only, left = L only, front = back = centre (plain stereo can't tell them apart), turning works.
+  The game also renders stereo: Windows' default device is Voicemeeter Def (2 ch) and CATCAR's per-app routing
+  (registry `PolicyConfig\PropertyStore`) points at Voicemeeter VAIO out7/out8, not In 3. **Voicemeeter In 3** is the
+  only 7.1 device and the only one with Equalizer APO + **HeSuVi** (headphone surround, binaural front/back).
+- ClubEQ refuses to start when Output is the device it records (`X [loopback]` in, `X` out): it would record itself.
+- The user's `settings.json` never got rewritten after the first launch (presets did). Saving errors now show in the
+  status line instead of being swallowed; the cause isn't known yet.
 - Loopback only delivers data while something plays. During silence the record head stalls, the engine notices the
   latency going negative and restarts the speakers aligned once data flows again.
 

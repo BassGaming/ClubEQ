@@ -19,7 +19,30 @@ static class SelfTest
 
     // ClubEQ.exe --smoke "<input name part>": plays a quiet 440 Hz tone into that device for 8 s and runs the Garage
     // scene (Underground on) recording it, so every DSP in the chain gets created and driven. Prints what happened.
-    public static int Smoke(string input)
+    public static int Smoke(string input) => Run3D(input, false);
+    public static int Pan(string input) => Run3D(input, true);
+
+    // --pan: one dry speaker 5 m to your right, left, front and back; prints the left/right output peaks.
+    static void PanCases(Audio.Engine en, FMOD.System tone)
+    {
+        foreach (var (label, x, z, yaw) in new[] { ("right (+x)", 5f, 0f, 0f), ("left (-x)", -5f, 0f, 0f), ("front (+z)", 0f, 5f, 0f), ("back (-z)", 0f, -5f, 0f),
+                                                   ("right, you face right", 5f, 0f, 90f), ("+x, you face back", 5f, 0f, 180f) })
+        {
+            var p = new Preset { Reverb = new RoomReverb { On = false } };
+            p.Room.ListenerYaw = yaw;
+            p.Speakers.Add(new Speaker { Name = "S", X = x, Y = 1.6f, Z = z, P = { ["MinDistance"] = 1, ["Spread"] = 0 } });
+            float l = 0, r = 0;
+            for (int f = 0; f < 90; f++)
+            {
+                tone.update(); en.Update(p, 1 / 60f);
+                if (f > 45) { l = Math.Max(l, en.OutputLR.L); r = Math.Max(r, en.OutputLR.R); }
+                System.Threading.Thread.Sleep(16);
+            }
+            Console.WriteLine($"{label,-24} L {l:0.000}  R {r:0.000}");
+        }
+    }
+
+    static int Run3D(string input, bool pan)
     {
         Console.WriteLine();
         using var en = new Audio.Engine();
@@ -41,6 +64,7 @@ static class SelfTest
         en.Start(i);
         Console.WriteLine(en.Status);
         float maxOut = 0;
+        if (pan) { PanCases(en, tone); ch.stop(); osc.release(); tone.close(); tone.release(); return 0; }
         foreach (var (label, setup) in new (string, Action<Preset>)[] {
             ("normal", _ => { }), ("no room reverb", x => x.Reverb.On = false), ("Underground", x => x.Macros[0].On = true),
             ("Underground, no room reverb", x => { x.Macros[0].On = true; x.Reverb.On = false; }) })

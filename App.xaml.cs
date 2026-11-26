@@ -25,6 +25,12 @@ public partial class App : Application
             Shutdown(SelfTest.Smoke(e.Args[1]));
             return;
         }
+        if (e.Args.Length == 2 && e.Args[0] == "--pan")
+        {
+            AttachConsole(-1);
+            Shutdown(SelfTest.Pan(e.Args[1]));
+            return;
+        }
         if (e.Args.Contains("--devices")) // what FMOD sees, for debugging routing
         {
             AttachConsole(-1);
