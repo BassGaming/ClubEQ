@@ -11,14 +11,23 @@ sealed class Dsp
     public readonly FMOD.DSP Handle;
     readonly Dictionary<string, float> last = new();
 
-    Dsp(string type, FMOD.DSP h) { Type = type; Handle = h; }
+    readonly bool multiband; // high/low-pass on the multiband EQ (fallback): band A's params start at 1, not 0
+
+    Dsp(string type, FMOD.DSP h, bool mb = false) { Type = type; Handle = h; multiband = mb; }
 
     public static Dsp Create(FMOD.System sys, string type)
     {
+        // Unity's AudioLowPassFilter / AudioHighPassFilter are FMOD's classic resonant LOWPASS / HIGHPASS (cutoff,
+        // resonance Q), so use those; if this FMOD refuses them, band A of the multiband EQ (12 dB) stands in.
+        if (type is "HighPass" or "LowPass")
+        {
+            if (sys.createDSPByType(type == "LowPass" ? FMOD.DSP_TYPE.LOWPASS : FMOD.DSP_TYPE.HIGHPASS, out var f) == FMOD.RESULT.OK) return new Dsp(type, f);
+            Engine.Ok(sys.createDSPByType(FMOD.DSP_TYPE.MULTIBAND_EQ, out var mb), "create " + type);
+            Engine.Ok(mb.setParameterInt(0, type == "LowPass" ? 1 : 4), "filter type"); // LOWPASS_12DB / HIGHPASS_12DB
+            return new Dsp(type, mb, true);
+        }
         var kind = type switch
         {
-            // FMOD 2.03 dropped the old LOWPASS/HIGHPASS types; one band of the multiband EQ is the same 12 dB resonant filter.
-            "HighPass" or "LowPass" => FMOD.DSP_TYPE.MULTIBAND_EQ,
             "Reverb" => FMOD.DSP_TYPE.SFXREVERB,
             "Distortion" => FMOD.DSP_TYPE.DISTORTION,
             "Eq" => FMOD.DSP_TYPE.THREE_EQ,
@@ -27,10 +36,10 @@ sealed class Dsp
             _ => throw new ArgumentException("No DSP for effect " + type),
         };
         Engine.Ok(sys.createDSPByType(kind, out var h), "create " + type);
-        if (type is "HighPass" or "LowPass")
-            Engine.Ok(h.setParameterInt(0, type == "LowPass" ? 1 : 4), "filter type"); // band A: LOWPASS_12DB / HIGHPASS_12DB
         return new Dsp(type, h);
     }
+
+    public bool Multiband => multiband;
 
     // values: the effect's parameters by name (already smoothed). Only changes go to FMOD.
     public void Apply(Func<string, float> value, bool bypass)
@@ -51,7 +60,11 @@ sealed class Dsp
         {
             case "HighPass":
             case "LowPass":
-                Set(1, Math.Clamp(L("Cutoff"), 20, 22000)); Set(2, Math.Clamp(L("Resonance"), .1f, 10)); break;
+                {
+                    int o = multiband ? 1 : 0;
+                    Set(o, Math.Clamp(L("Cutoff"), multiband ? 20 : 10, 22000)); Set(o + 1, Math.Clamp(L("Resonance"), multiband ? .1f : 1, 10));
+                    break;
+                }
             case "Reverb":
                 {
                     int i = Math.Clamp((int)MathF.Round(L("Preset")), 0, Effects.ReverbPresets.Length - 1);

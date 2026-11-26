@@ -59,6 +59,16 @@ session (`U:\OpencodeProjects\catcar`, the Radio mod is `catcar/Radio/`); this r
     sign follows the read order, so the real offsets are inside one block (0..21 ms), as ClubEQ's defaults.
   - The import now also sets the garage reverb, the cars' spots and the ear height, and decides "same music" by
     playlist roots (the user's garage radio follows Car 1: link 1 on station 0).
+- **Measuring** (`Measure.cs`, 2026-11-26): exponential sine sweeps, left input only then right only (6 s each,
+  20 Hz-20 kHz, -10 dBFS). `--serve [8765]` serves `%APPDATA%\ClubEQ\Measure\sweep.wav` for the Radio mod (add
+  `http://127.0.0.1:8765/sweep.wav` as a station; ffmpeg plays it, it loops when it ends); `--record "Voicemeeter Def"
+  <s> <out.wav>` records the game's output (loopback); `--measure-clubeq <out.wav> <x> <z> <yaw> [preset] [y]` plays
+  the sweep into vm5 Browser through ClubEQ's engine and records Voicemeeter Def the same way; `--analyze a.wav [b.wav]`
+  deconvolves into the four impulse responses (L/R in -> L/R out, written as `<a>.ir.wav`), prints third-octave EQ per
+  ear (each relative to its own 250 Hz-8 kHz average), EDT/T20, crosstalk and the arrivals in the first 80 ms, and with
+  two files the differences. Goal: a blind test can't tell CATCAR from ClubEQ, so tune until these match.
+- High/low-pass now use FMOD's classic `LOWPASS`/`HIGHPASS` (what Unity's filters are); the multiband EQ only as a
+  fallback if the DLL refuses them.
 - User A/B (same song, same spot): CATCAR sounds like a larger garage, with better EQ and clarity. The game's mixer
   is "MainAudioMixer" (sharedassets0) with groups Master, Engines, Engines Exterior, Music, Voice (plus the FX group
   the mod routes to, not found in that file); what effects sit on them can't be read from the strings. Next step if
