@@ -60,8 +60,8 @@ session (`U:\OpencodeProjects\catcar`, the Radio mod is `catcar/Radio/`); this r
   - The import now also sets the garage reverb, the cars' spots and the ear height, and decides "same music" by
     playlist roots (the user's garage radio follows Car 1: link 1 on station 0).
 - **Measuring** (`Measure.cs`, 2026-11-26): exponential sine sweeps, left input only then right only (6 s each,
-  20 Hz-20 kHz, -10 dBFS). `--serve [8765]` serves `%APPDATA%\ClubEQ\Measure\sweep.wav` for the Radio mod (add
-  `http://127.0.0.1:8765/sweep.wav` as a station; ffmpeg plays it, it loops when it ends); `--record "Voicemeeter Def"
+  20 Hz-20 kHz, -10 dBFS). `--serve [8799]` serves `%APPDATA%\ClubEQ\Measure\sweep.wav` for the Radio mod (add
+  `http://127.0.0.1:8799/sweep.wav` as a station; ffmpeg plays it, it loops when it ends; not 8765, the Data API mod uses that); `--record "Voicemeeter Def"
   <s> <out.wav>` records the game's output (loopback); `--measure-clubeq <out.wav> <x> <z> <yaw> [preset] [y]` plays
   the sweep into vm5 Browser through ClubEQ's engine and records Voicemeeter Def the same way; `--analyze a.wav [b.wav]`
   deconvolves into the four impulse responses (L/R in -> L/R out, written as `<a>.ir.wav`), prints third-octave EQ per

@@ -35,7 +35,7 @@ public partial class App : Application
             {
                 code = a[0] switch
                 {
-                    "--serve" => Measure.Serve(a.Length > 1 ? int.Parse(a[1]) : 8765),
+                    "--serve" => Measure.Serve(a.Length > 1 ? int.Parse(a[1]) : 8799),
                     "--record" => Measure.RecordCmd(a[1], F(2, 40), a[3]),
                     "--measure-clubeq" => Measure.MeasureClubEQ(a[1], F(2, 0), F(3, 0), F(4, 0), a.Length > 5 ? a[5] : "Garage", F(6, 1)),
                     _ => Measure.Analyze(a[1], a.Length > 2 ? a[2] : null),
