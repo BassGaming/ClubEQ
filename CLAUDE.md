@@ -118,8 +118,8 @@ session (`U:\OpencodeProjects\catcar`, the Radio mod is `catcar/Radio/`); this r
     player's Radio `Volume` (0.25 here) is not copied. The BepInEx folder comes from Steam's libraryfolders.vdf or a
     folder picker, saved as `Settings.CatcarBepInEx`.
   - `Builtin.cs`: the Garage preset (numbers below), with the user's own mod setup of 2026-11-26 baked in: garage
-    radio 0.585 with Underground 0.389, corners 0.409/0.4375/0.447/0.466 with Underground on corners 2 (0.557) and 4
-    (0.504), Car 1 synced (0.7 x 1.3), Car 2 muted. `Builtin.Corner` / `Builtin.Portable` build mod-style speakers. `Store.cs`: JSON (System.Text.Json, fields, enums as strings),
+    radio 0.533 with Underground 0.389, corners 0.409/0.4375/0.447/0.466 with Underground on corners 2 (0.557) and 4
+    (0.504), Car 1 synced (0.7 x 1.3), Car 2 muted, master +8.7 dB with the limiter off, you at (0.6, 3.45) facing the back wall. `Builtin.Corner` / `Builtin.Portable` build mod-style speakers. `Store.cs`: JSON (System.Text.Json, fields, enums as strings),
     temp-file-and-swap writes.
 - `Audio/`:
   - `Engine.cs`: one FMOD system. `recordStart` into a looping 1 s PCM16 sound; each speaker = a 3D channel playing that

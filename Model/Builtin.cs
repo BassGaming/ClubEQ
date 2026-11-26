@@ -69,20 +69,22 @@ public static class Builtin
 
     public static Preset Garage()
     {
-        var p = new Preset { Name = "Garage" };
+        // The user's own listening setup (2026-11-27): master +8.7 dB with the limiter off (matched to CATCAR by ear),
+        // standing between the cars and the middle, facing the back wall.
+        var p = new Preset { Name = "Garage", Master = 2.7366f, Limiter = false };
         // Walls measured by the mod (log "Corner speakers: walls at +x 7.4 -x 7.8 +z 9.6 -z 5.5 m from the middle").
         // Ears at 1.0 m: you are a cat (probe: camera 1.0 m above the garage floor).
-        p.Room = new Room { MinX = -7.8f, MaxX = 7.4f, MinZ = -5.5f, MaxZ = 9.6f, Height = 3, ListenerX = 0, ListenerY = 1, ListenerZ = -1.5f };
+        p.Room = new Room { MinX = -7.8f, MaxX = 7.4f, MinZ = -5.5f, MaxZ = 9.6f, Height = 3, ListenerX = .6f, ListenerY = 1, ListenerZ = 3.45f, ListenerYaw = -180 };
         p.Reverb = GarageReverb();
 
         // The user's own setup in the mod on 2026-11-26 (catcar.radio.state.txt; "Import from CATCAR" re-reads it):
-        // garage radio 58 % with Underground at 39 %, corners 41-47 % with Underground on corners 2 and 4, Car 1 synced
+        // garage radio 58 % (53 % since 2026-11-27) with Underground at 39 %, corners 41-47 % with Underground on corners 2 and 4, Car 1 synced
         // to the garage at 70 %, Car 2 on its own playlist (muted here).
         // Garage radio: log "Radio built on TireRackFixture(Clone) at (-1.51, -0.15, -349.52)", on its crate.
         var box = new Speaker
         {
             Name = "Boombox", Kind = SpeakerKind.Boombox, X = 6.3f, Y = .52f, Z = -4.2f, Yaw = 0, // probe: source at y 0.37 world
-            P = P(("Volume", .585f), ("MinDistance", 7), ("MaxDistance", 150), ("Spread", 60), ("Level3D", 1)),
+            P = P(("Volume", .5327f), ("MinDistance", 7), ("MaxDistance", 150), ("Spread", 60), ("Level3D", 1)),
             Chain = { Fx("HighPass", ("Cutoff", 90)), Fx("LowPass", ("Cutoff", 12000)), Fx("Reverb", ("Preset", Room)), Fx("Distortion", ("Level", 0)) },
         };
         box.Macros["Underground"] = new SpeakerMacro { Own = true, On = true, Amount = .389f };
@@ -90,7 +92,7 @@ public static class Builtin
 
         // Four PA cabinets 0.4 m off both walls of each corner, 2.7 m up, facing the middle (positions as the mod measured them).
         var r = p.Room;
-        var corners = new[] { (6.98f, 9.16f, .409f, false, .5f), (-7.38f, 9.16f, .4375f, true, .557f), (-7.38f, -5.07f, .447f, false, .5f), (6.98f, -5.07f, .466f, true, .504f) };
+        var corners = new[] { (6.98f, 9.155f, .409f, false, .5f), (-7.38f, 9.155f, .4375f, true, .557f), (-7.38f, -5.07f, .447f, false, .5f), (6.98f, -5.07f, .466f, true, .504f) };
         for (int i = 0; i < 4; i++)
         {
             var (x, z, vol, muffle, amt) = corners[i];
