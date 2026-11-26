@@ -12,6 +12,7 @@ public class Settings
     public string Input = "";   // device names, matched on start (indices change when devices come and go)
     public string Output = "";
     public string Preset = "Garage";
+    public string CatcarBepInEx = ""; // the game's BepInEx folder, for "Import from CATCAR"
     public double Width = 1280, Height = 800;
     public bool Maximized;
 }

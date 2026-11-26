@@ -70,6 +70,7 @@ static class SelfTest
         var box = p.Speakers.First(s => s.Kind == SpeakerKind.Boombox);
         var car = p.Speakers.First(s => s.Kind == SpeakerKind.Car);
         var ug = p.Macros.First(m => m.Name == "Underground");
+        foreach (var s in p.Speakers) s.Macros.Clear(); // the macro alone first; the built-in has the user's own switches
 
         Check(Near(Mix.Targets(p, box, false)["LowPass.Cutoff"], 12000), "boombox low-pass 12 kHz when Underground is off");
         ug.On = true; ug.Amount = 0;
@@ -98,6 +99,24 @@ static class SelfTest
         Check(Mix.IsInside(car, r), "listener at the driver's seat is inside");
         var ti = Mix.Targets(p, car, true);
         Check(Near(ti["LowPass.Cutoff"], 22000) && Near(ti["Level3D"], .25f, .01f), "inside: low-pass 22 kHz, 3D amount 0.25");
+
+        // import from a fake BepInEx folder
+        var dir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "clubeq-import-test");
+        System.IO.Directory.CreateDirectory(System.IO.Path.Combine(dir, "config"));
+        System.IO.File.WriteAllText(System.IO.Path.Combine(dir, "config", "catcar.radio.state.txt"),
+            string.Join("\n", "S|0|0.5|1|0.3|-1|1|1", "S|1|0.6|0|0.5|0|1|1", "S|2|0.7|0|0.5|-1|1|1",
+                "P|P~0~1~-2^0^-15.19^2.55^-336.16^141^0^0.44^1^0.55^Hub`7^0^-7.81^-0.15^-345.32^0^0^0.9^0^0.5^Hub")
+            .Replace('|', '\t').Replace('~', '\u001f').Replace('`', '\u001e').Replace('^', '\u001d'));
+        System.IO.File.WriteAllText(System.IO.Path.Combine(dir, "LogOutput.log"), "[Info   :     Radio] Radio built on TireRackFixture(Clone) at (-1.51, -0.15, -349.52).");
+        var q = Builtin.Garage();
+        RadioImport.Apply(q, dir);
+        var qb = q.Speakers.First(s => s.Name == "Boombox");
+        Check(qb.Use(q.Macros[0]) == (true, .3f) && Near(qb.Get("Volume"), .5f, .001f), "import: garage radio volume and Underground");
+        Check(Near(qb.X, 6.3f, .05f) && Near(qb.Z, -4.2f, .05f), "import: garage radio position from the log");
+        var c2 = q.Speakers.First(s => s.Name == "Corner 2");
+        Check(Near(c2.X, -7.38f, .05f) && Near(c2.Z, 9.16f, .05f) && c2.Use(q.Macros[0]).On, "import: corner position and Underground");
+        Check(!q.Speakers.First(s => s.Name == "Car 1").Mute && q.Speakers.First(s => s.Name == "Car 2").Mute, "import: synced car plays, the other is muted");
+        Check(q.Speakers.Any(s => s.Name == "Portable 7" && Near(s.X, 0, .05f)), "import: portable radio in the garage");
 
         string a = Store.ToJson(Builtin.Garage()), b = Store.ToJson(Store.FromJson<Preset>(a));
         Check(a == b, "preset JSON round trip");

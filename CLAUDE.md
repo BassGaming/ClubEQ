@@ -46,7 +46,17 @@ session (`U:\OpencodeProjects\catcar`, the Radio mod is `catcar/Radio/`); this r
     speakers' entries.
   - `Mix.cs`: `Targets(preset, speaker, inside)` = own values, then the macros that are on, then the inside profile.
     Pure; the engine smooths towards it. `IsInside`, `ZonePoint` (zone offset turned by the speaker's yaw).
-  - `Builtin.cs`: the Garage preset (numbers below). `Store.cs`: JSON (System.Text.Json, fields, enums as strings),
+  - `RadioImport.cs`: "Import from CATCAR Radio" (button in the room/preset view). Reads the mod's
+    `BepInEx\config\catcar.radio.state.txt` (S lines: station, vol, muffle, amt, link; P line: the mod's P message with
+    corners id -1..-4 and portables, positions in world space) and `LogOutput.log` (`Radio built on ... at (x, y, z)` =
+    the garage radio, `Corner speakers: ... from the middle (x, y, z)` = the garage origin, else (-7.81, -0.15,
+    -345.32)). Sets volumes and per-speaker Underground, corner and garage radio positions, adds garage portables (on the
+    garage playlist), mutes a car unless it is synced to the garage (link 0), turns the strip's Underground off. The
+    player's Radio `Volume` (0.25 here) is not copied. The BepInEx folder comes from Steam's libraryfolders.vdf or a
+    folder picker, saved as `Settings.CatcarBepInEx`.
+  - `Builtin.cs`: the Garage preset (numbers below), with the user's own mod setup of 2026-11-26 baked in: garage
+    radio 0.585 with Underground 0.389, corners 0.409/0.4375/0.447/0.466 with Underground on corners 2 (0.557) and 4
+    (0.504), Car 1 synced (0.7 x 1.3), Car 2 muted. `Builtin.Corner` / `Builtin.Portable` build mod-style speakers. `Store.cs`: JSON (System.Text.Json, fields, enums as strings),
     temp-file-and-swap writes.
 - `Audio/`:
   - `Engine.cs`: one FMOD system. `recordStart` into a looping 1 s PCM16 sound; each speaker = a 3D channel playing that
@@ -88,7 +98,7 @@ session (`U:\OpencodeProjects\catcar`, the Radio mod is `catcar/Radio/`); this r
 | Underground (garage radio, portables, corners): low-pass exp-lerp 3.5 kHz -> 160 Hz by the slider, high-pass 10 Hz, reverb ParkingLot, distortion 0.12 -> 0.4, `minDistance` x2.5, volume x1.5 | the Underground macro (kinds Boombox and Cabinet) |
 | Car radio: 0.9 m above the car, outside low-pass 500 Hz, volume x1.3; inside (camera within 1.5 m of the cockpit camera) low-pass 22 kHz, `spatialBlend` 0.25 | car speakers + inside profile (zone 0.35 m left, 0.2 m back of the car centre: a guess) |
 | Volumes: station knob x the player's Volume 0.8 (boombox 0.8 -> 0.64, corners 0.6 -> 0.48, cars 0.8 x 1.3 -> 0.83) | speaker Volume |
-| Garage walls from the middle: +x 7.4, -x 7.8, +z 9.6, -z 5.5 m (mod log `Corner speakers: walls at ...`); tile grid 10 x 7 at 1.4 m, the radio on back-row tile 9 | Garage room, boombox at (6.3, 0.75, 4.2) (approx.) |
+| Garage walls from the middle: +x 7.4, -x 7.8, +z 9.6, -z 5.5 m (mod log `Corner speakers: walls at ...`); garage radio fixture at (-1.51, -0.15, -349.52) (log `Radio built on ...`) = (6.3, -4.2) from the middle (0.1.0 had z +4.2, mirrored) | Garage room, boombox at (6.3, 0.75, -4.2) |
 | The garage's only `AudioReverbZone` "GarageReverb" at (-8.00, 1.40, -341.30) (garage middle (-7.81, -0.15, -345.32)), preset **User**, radii 8/12 m, grown by the mod to cover the whole garage (EvenGarageReverb) | `RoomReverb`, applied to every speaker (values below) |
 
 ## Open items
@@ -105,6 +115,13 @@ session (`U:\OpencodeProjects\catcar`, the Radio mod is `catcar/Radio/`); this r
   with the -12 dB headroom (and stereo mix, just in case). Not re-heard yet; if it's still flat, next suspects: the
   per-speaker Room reverb + room reverb washing out the panning (compare with reverbs off), Unity maybe placing the
   AudioSource filters after its panner instead of before, the listener standing still (in game you move and turn).
-- Car parking spots in the garage are guessed (x ±2.6, z 1.5); the boombox spot is approximate.
+- Car parking spots in the garage are guessed (x ±2.6, z 1.5). Corner and radio spots are the game's.
+- **Still flatter than CATCAR** (user, after the headroom fix, before the import). The import brings the user's real
+  mix (Underground on the radio and two corners, which ClubEQ's defaults didn't have). If it still differs, the way to
+  copy the game exactly is to measure it: play a sine sweep through the Radio mod (it plays any http URL as a station,
+  so serve the sweep from a local HTTP server), loopback-record the game's output device standing at one spot (left
+  only, then right only), deconvolve into a 2x2 impulse response, and add a convolution mode. That captures everything
+  linear (Unity's panning, filters, both reverbs, distances) exactly for that spot and settings; the Underground
+  distortion is the only non-linear part.
 - Unity's spread/panning and FMOD's are both FMOD under the hood, but Unity's AudioSource may add its own 3D level
   handling; compare by ear.

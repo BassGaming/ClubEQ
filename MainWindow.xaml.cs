@@ -166,6 +166,24 @@ public partial class MainWindow : Window
                     presets[presets.IndexOf(cur)] = b; Store.SavePreset(b); LoadPreset(b);
                     break;
                 }
+            case "catcar":
+                {
+                    string dir = Directory.Exists(settings.CatcarBepInEx) ? settings.CatcarBepInEx : RadioImport.FindBepInEx();
+                    if (dir == null)
+                    {
+                        var d = new Microsoft.Win32.OpenFolderDialog { Title = "CATCAR's BepInEx folder" };
+                        if (d.ShowDialog(this) != true) return;
+                        dir = d.FolderName;
+                    }
+                    try
+                    {
+                        Flash(RadioImport.Apply(cur, dir));
+                        settings.CatcarBepInEx = dir; SaveSettings();
+                        Reshaped(); Select(null);
+                    }
+                    catch (Exception e) { Flash("Import failed: " + e.Message); }
+                    break;
+                }
             case "export":
                 {
                     var d = new Microsoft.Win32.SaveFileDialog { FileName = cur.Name + ".clubeq.json", Filter = "ClubEQ preset|*.json" };

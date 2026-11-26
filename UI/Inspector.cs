@@ -228,6 +228,8 @@ sealed class Inspector
             Button("Export", () => PresetAction("export")), Button("Import", () => PresetAction("import")),
             Button("Reset", () => PresetAction("reset"), tip: "Back to the built-in version (built-in presets only)"),
             Button("Delete", () => PresetAction("delete"), "BtnDanger")));
+        Add(Button("Import from CATCAR Radio", () => PresetAction("catcar"), "BtnPrimary",
+            "Copy the Radio mod's current garage setup: each radio's volume and Underground, the corner speakers, portables, where the garage radio stands"));
 
         Add(Heading("Add a speaker"));
         Add(Wrap(Enum.GetValues<SpeakerKind>().Select(k => (UIElement)Button("+ " + k, () => AddSpeaker(k))).ToArray()));
