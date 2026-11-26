@@ -80,6 +80,7 @@ public static class Effects
         new("MinDistance", "Full volume within", .3f, 40, 5, "m", true),
         new("MaxDistance", "Max distance", 5, 500, 150, "m", true),
         new("Spread", "Spread", 0, 360, 60, "°"),
+        new("Delay", "Time offset", 0, 60, 0, "ms"),
         new("Level3D", "3D amount", 0, 1, 1),
     };
     public static ParamDef SpeakerParam(string name) => SpeakerParams.First(p => p.Name == name);

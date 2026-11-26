@@ -141,6 +141,7 @@ static class SelfTest
         Check(Near(c2.X, -7.38f, .05f) && Near(c2.Z, 9.16f, .05f) && c2.Use(q.Macros[0]).On, "import: corner position and Underground");
         Check(!q.Speakers.First(s => s.Name == "Car 1").Mute && q.Speakers.First(s => s.Name == "Car 2").Mute, "import: synced car plays, the other is muted");
         Check(q.Speakers.Any(s => s.Name == "Portable 7" && Near(s.X, 0, .05f)), "import: portable radio in the garage");
+        Check(q.Speakers.Where(s => s.Kind == SpeakerKind.Cabinet).Select(s => s.Get("Delay")).Distinct().Count() == 4, "corner speakers each have their own time offset");
 
         Check(RadioImport.Normalize(System.IO.Path.Combine(dir, "config")) == dir && RadioImport.Normalize(System.IO.Path.Combine(dir, "config", "catcar.radio.state.txt")) == dir,
             "import: the config folder or the file itself are accepted");

@@ -32,6 +32,17 @@ session (`U:\OpencodeProjects\catcar`, the Radio mod is `catcar/Radio/`); this r
   The game also renders stereo: Windows' default device is Voicemeeter Def (2 ch) and CATCAR's per-app routing
   (registry `PolicyConfig\PropertyStore`) points at Voicemeeter VAIO out7/out8, not In 3. **Voicemeeter In 3** is the
   only 7.1 device and the only one with Equalizer APO + **HeSuVi** (headphone surround, binaural front/back).
+- **Time offsets** (speaker param `Delay`, ms, 0..60 on the slider): each channel starts that much behind. The mod's
+  corner/portable speakers are mirrors that copy the garage radio's `timeSamples` on the main thread while audio runs,
+  so each sits 0..~20 ms off (re-synced only past 50 ms); the user heard that in game as "speakers not 100 % in sync".
+  Sample-exact speakers fuse into one flat phantom source, offsets let the ear pick each one out. Defaults
+  (`Builtin.MirrorOffset`): corners 6/14/3/18 ms, cars 9/12, portables by id, garage radio 0. The import fills them in
+  for speakers that have none. Changing one restarts all channels. Drift control measures on voice 0 and allows for its
+  offset (`lag0`).
+- User A/B (same song, same spot): CATCAR sounds like a larger garage, with better EQ and clarity. The game's mixer
+  is "MainAudioMixer" (sharedassets0) with groups Master, Engines, Engines Exterior, Music, Voice (plus the FX group
+  the mod routes to, not found in that file); what effects sit on them can't be read from the strings. Next step if
+  needed: measure the game (sweep through the Radio mod, loopback-record Voicemeeter Def).
 - ClubEQ refuses to start when Output is the device it records (`X [loopback]` in, `X` out): it would record itself.
 - The user's `settings.json` never got rewritten after the first launch (presets did). Saving errors now show in the
   status line instead of being swallowed; the cause isn't known yet.

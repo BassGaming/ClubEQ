@@ -42,7 +42,7 @@ public sealed class Engine : IDisposable
     uint lastRec, lastPlay;
     long recorded, played;
     double latencyAvg;
-    uint target;
+    uint target, lag0;
 
     public string Status { get; private set; } = "Stopped";
     public bool Running => recDriver >= 0;
@@ -147,8 +147,11 @@ public sealed class Engine : IDisposable
         started = false;
     }
 
-    // The chain layout; when it changes (speaker added, effect moved) every channel restarts, aligned again.
-    static string Shape(Preset p) => string.Join("|", p.Speakers.Select(s => string.Join(",", s.Chain.Select(e => e.Type))));
+    // The chain layout and time offsets; when they change (speaker added, effect moved, offset edited) every channel
+    // restarts, aligned again.
+    static string Shape(Preset p) => string.Join("|", p.Speakers.Select(s => MathF.Round(s.Get("Delay")) + ":" + string.Join(",", s.Chain.Select(e => e.Type))));
+
+    uint Lag(Speaker s) => (uint)(Math.Clamp(MathF.Round(s.Get("Delay")), 0, 400) * rate / 1000);
 
     public void Update(Preset p, float dt)
     {
@@ -191,10 +194,10 @@ public sealed class Engine : IDisposable
         voices[0].Ch.getPosition(out uint pp, FMOD.TIMEUNIT.PCM);
         uint pd = pp >= lastPlay ? pp - lastPlay : pp + soundLen - lastPlay;
         lastPlay = pp; played += pd;
-        long lat = recorded - played;
+        long lat = recorded - played; // = target + voice 0's own offset when on time
         if (lat < 0 || lat > soundLen / 2) { StopVoices(); return; } // lost (device hiccup): restart aligned
         latencyAvg = latencyAvg * .97 + lat * .03;
-        float freq = rate * (float)(1 + Math.Clamp((latencyAvg - target) / target * .01, -.005, .005));
+        float freq = rate * (float)(1 + Math.Clamp((latencyAvg - target - lag0) / target * .01, -.005, .005));
         foreach (var v in voices) v.Ch.setFrequency(freq);
 
         bool anySolo = p.Speakers.Any(x => x.Solo);
@@ -215,12 +218,15 @@ public sealed class Engine : IDisposable
     {
         group.setPaused(true);
         uint start = (rp + soundLen - target) % soundLen;
+        lag0 = p.Speakers.Count > 0 ? Lag(p.Speakers[0]) : 0;
         foreach (var s in p.Speakers)
         {
             var v = new Voice();
             Ok(sys.playSound(rec, group, true, out v.Ch), "play");
             v.Ch.setMode(FMOD.MODE.LOOP_NORMAL | FMOD.MODE._3D | FMOD.MODE._3D_INVERSEROLLOFF);
-            v.Ch.setPosition(start, FMOD.TIMEUNIT.PCM);
+            // Each speaker a few ms apart, as the mod's mirrors are: same song, but the ear hears separate speakers
+            // instead of one phantom source in between.
+            v.Ch.setPosition((start + soundLen - Lag(s)) % soundLen, FMOD.TIMEUNIT.PCM);
             v.Ch.setReverbProperties(0, 1);
             v.Ch.setPaused(false); // still held by the paused group
             // Added at the tail one by one from the last effect, so the signal runs first effect -> last -> 3D panner, as in Unity.
@@ -229,7 +235,7 @@ public sealed class Engine : IDisposable
             if (v.Ch.getDSP(FMOD.CHANNELCONTROL_DSP_INDEX.HEAD, out v.Meter) == FMOD.RESULT.OK) v.Meter.setMeteringEnabled(false, true);
             voices.Add(v);
         }
-        lastPlay = start; played = recorded - target; latencyAvg = target;
+        lastPlay = (start + soundLen - lag0) % soundLen; played = recorded - target - lag0; latencyAvg = target + lag0;
         started = true;
         group.setPaused(false);
     }

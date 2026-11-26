@@ -140,6 +140,7 @@ public static class RadioImport
                 }
                 s.X = px; s.Y = id < 0 ? py : Math.Max(py, 0) + .3f; s.Z = pz; s.Yaw = ((yaw + 180) % 360) - 180;
                 s.P["Volume"] = vol;
+                if (!s.P.ContainsKey("Delay")) s.P["Delay"] = Builtin.MirrorOffset(id);
                 Use(s, muffle, amt);
             }
             done.Add($"{corners} corner speakers" + (portables > 0 ? $", {portables} portables" : ""));

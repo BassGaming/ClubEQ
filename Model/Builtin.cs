@@ -25,6 +25,10 @@ public static class Builtin
 
     static readonly float Room = Effects.ReverbIndex("Room");
 
+    // The mod's corner and portable speakers are mirrors: they copy the garage radio's play position on the main thread
+    // while the audio runs on, so each lands 0..~20 ms off (fixed until the next re-sync at 50 ms). Spread like that.
+    public static float MirrorOffset(int id) => id switch { -1 => 6, -2 => 14, -3 => 3, -4 => 18, _ => (id * 7 % 19 + 19) % 19 + 1 };
+
     // A corner PA cabinet as the mod builds it: high-pass 35, low-pass 16 k, reverb Room, fully positional from 6 m.
     public static Speaker Corner(string name, float x, float z) => new()
     {
@@ -79,6 +83,7 @@ public static class Builtin
             var (x, z, vol, muffle, amt) = corners[i];
             var c = Corner("Corner " + (i + 1), x, z);
             c.P["Volume"] = vol;
+            c.P["Delay"] = MirrorOffset(-(i + 1));
             c.Macros["Underground"] = new SpeakerMacro { Own = true, On = muffle, Amount = amt };
             p.Speakers.Add(c);
         }
@@ -89,7 +94,7 @@ public static class Builtin
             p.Speakers.Add(new Speaker
             {
                 Name = name, Kind = SpeakerKind.Car, X = x, Y = .9f, Z = 1.5f, Yaw = 0, Mute = mute,
-                P = P(("Volume", vol), ("MinDistance", 4), ("MaxDistance", 150), ("Spread", 60), ("Level3D", 1)),
+                P = P(("Volume", vol), ("MinDistance", 4), ("MaxDistance", 150), ("Spread", 60), ("Level3D", 1), ("Delay", name == "Car 1" ? 9 : 12)),
                 Chain = { Fx("LowPass", ("Cutoff", 500)) },
                 Inside = new InsideProfile { OffsetX = -.35f, OffsetZ = -.2f, Radius = 1.5f, Values = P(("LowPass.Cutoff", 22000), ("Level3D", .25f)) },
             });
