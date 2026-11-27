@@ -186,6 +186,76 @@ static class Measure
         finally { sys.close(); sys.release(); }
     }
 
+    // --vm-latency [block gapMs]: what the Voicemeeter insert adds. Clicks (one a second) play into vm5 Browser; the
+    // insert also listens to Voicemeeter's bus outputs, so every click is timed from the strip's input to bus A1 on
+    // Voicemeeter's own sample clock. Phases of 4 s: the insert passing the strip through (Voicemeeter's own share),
+    // one dry speaker (ClubEQ's share, no filters), the Garage (with its filters and room).
+    public static int VmLatency(uint block, int gap)
+    {
+        const int Phase = 4, Phases = 3;
+        Audio.Engine.Ok(FMOD.Factory.System_Create(out var ps), "click system");
+        ps.getNumDrivers(out int nd);
+        for (int k = 0; k < nd; k++) { ps.getDriverInfo(k, out string name, 256, out _, out _, out _, out _); if (name.Contains("vm5 Browser")) ps.setDriver(k); }
+        Audio.Engine.Ok(ps.init(8, FMOD.INITFLAGS.NORMAL, IntPtr.Zero), "click init");
+        var ex = new FMOD.CREATESOUNDEXINFO { cbsize = Marshal.SizeOf<FMOD.CREATESOUNDEXINFO>(), numchannels = 2, format = FMOD.SOUND_FORMAT.PCMFLOAT, defaultfrequency = Rate, length = Rate * 2 * 4 };
+        Audio.Engine.Ok(ps.createSound("", FMOD.MODE.LOOP_NORMAL | FMOD.MODE.OPENUSER, ref ex, out var click), "click sound");
+        var pcm = new float[Rate * 2];
+        for (int i = 0; i < 24; i++) pcm[i * 2] = pcm[i * 2 + 1] = .3f; // a 0.5 ms click
+        click.@lock(0, (uint)pcm.Length * 4, out var p1, out _, out var l1, out _);
+        Marshal.Copy(pcm, 0, p1, (int)l1 / 4);
+        click.unlock(p1, IntPtr.Zero, l1, 0);
+
+        using var en = new Audio.Engine(FMOD.OUTPUTTYPE.NOSOUND_NRT, block, 2, gap);
+        var strips = Audio.Voicemeeter.Strips();
+        int strip = Audio.Voicemeeter.DefaultStrip(strips);
+        // one speaker 1 m in front, no filters, no room: the click comes out as a click
+        var dry = new Preset { Reverb = new RoomReverb { On = false }, Limiter = false, Master = 1 / .0268f };
+        dry.Speakers.Add(new Speaker { Name = "dry", X = dry.Room.ListenerX, Y = dry.Room.ListenerY, Z = dry.Room.ListenerZ + 1, P = { ["MinDistance"] = 5, ["Spread"] = 0 } });
+        var garage = Builtin.Garage();
+        var probe = new Audio.Voicemeeter.Probe(Rate * (Phase * Phases + 2));
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        ps.playSound(click, default, false, out _);
+        using (var vm = new Audio.Voicemeeter(en, strip, "latency test", probe))
+        {
+            en.Stop(); // phase 0: the insert passes the strip through
+            double lastT = 0;
+            while (clock.Elapsed.TotalSeconds < Phase * Phases + 1)
+            {
+                double t = clock.Elapsed.TotalSeconds;
+                int phase = (int)(t / Phase);
+                if (phase >= 1 && !en.Running) en.StartClocked(Rate, 2, "latency test");
+                ps.update();
+                en.Update(phase >= 2 ? garage : dry, (float)(t - lastT));
+                lastT = t;
+                Thread.Sleep(10);
+            }
+        }
+        en.Stop(); click.release(); ps.close(); ps.release();
+
+        // every click on the strip's input, then the first sample on A1 within 300 ms reaching half that window's peak
+        long n = Math.Min(Math.Min(probe.InAt, probe.OutAt), probe.In.Length) - Rate / 3;
+        var byPhase = new List<double>[Phases];
+        for (int p = 0; p < Phases; p++) byPhase[p] = new();
+        for (long i = 1; i < n; i++)
+        {
+            if (Math.Abs(probe.In[i]) < .1f || Math.Abs(probe.In[i - 1]) >= .1f) continue;
+            int phase = Math.Min((int)(i / Rate / Phase), Phases - 1);
+            bool settled = i / Rate % Phase != 0; // not in a phase's first second
+            float max = 0;
+            for (long j = i; j < i + Rate * 3 / 10; j++) max = Math.Max(max, Math.Abs(probe.Out[j]));
+            long at = -1;
+            for (long j = i; j < i + Rate * 3 / 10 && at < 0; j++) if (max > .001f && Math.Abs(probe.Out[j]) >= max * .5f) at = j;
+            double ms = at < 0 ? double.NaN : (at - i) * 1000.0 / Rate;
+            Console.WriteLine($"  {i / (double)Rate,5:0.0} s  {new[] { "through", "dry", "Garage" }[phase],-8} A1 {ms:0.0} ms after the strip (peak {max:0.000}){(settled ? "" : "  (settling, not counted)")}");
+            if (settled && !double.IsNaN(ms)) byPhase[phase].Add(ms);
+            i += Rate / 2;
+        }
+        double Mean(int p) => byPhase[p].Count > 0 ? byPhase[p].Average() : double.NaN;
+        Console.WriteLine($"block {block}, gap {gap} ms, strip {(strip < strips.Count ? strips[strip] : "?")}:");
+        Console.WriteLine($"  strip -> A1: {Mean(0):0.0} ms passed through, {Mean(1):0.0} ms one dry speaker, {Mean(2):0.0} ms the Garage");
+        return byPhase.All(b => b.Count > 0) ? 0 : 1;
+    }
+
     public static int RecordCmd(string dev, double seconds, string outPath)
     {
         var x = Record(dev, seconds);
