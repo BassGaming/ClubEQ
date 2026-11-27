@@ -8,10 +8,15 @@ session (`U:\OpencodeProjects\catcar`, the Radio mod is `catcar/Radio/`); this r
 ## Build, test, run
 - `dotnet build` (net10.0-windows, WPF, x64). Builds must have 0 warnings.
 - `bin\Debug\net10.0-windows\win-x64\ClubEQ.exe --selftest`: model checks without audio (exit code 0 = passed).
-- `ClubEQ.exe --devices`: what FMOD sees (inputs, outputs).
+- `ClubEQ.exe --devices`: what FMOD sees (inputs, outputs) and Voicemeeter's input strips.
 - `ClubEQ.exe --smoke "vm5 Browser"`: plays a quiet 440 Hz tone into that device for 8 s, records it through the Garage
   scene in four setups (normal, no room reverb, Underground, both) and prints input/output peaks and per-speaker
-  levels. Exercises every DSP. The user hears the tone (they said that's fine).
+  levels. Exercises every DSP. The user hears the tone (they said that's fine). `--smoke "vm5 Browser" 256 3 25` = with
+  that mix block, buffer count and gap. `--smoke clocked` = the Voicemeeter insert's engine side without Voicemeeter
+  (must come out at 0.037 like the normal path, no start burst); `--smoke "voicemeeter:vm5 Browser"` = the real
+  insert for 6 s. `--vm-latency [block gapMs]` times clicks played into vm5 Browser from the strip's input to bus A1
+  inside Voicemeeter (registers IN|OUT, `Voicemeeter.Probe`): exact, on Voicemeeter's clock. Windows can't record A1
+  (the headphones device fails to open; "Voicemeeter Out A1".. record silence).
 - Settings and presets: `%APPDATA%\ClubEQ\` (`settings.json`, `Presets\<name>.json`); set `CLUBEQ_HOME` for tests so
   you don't touch the user's.
 - **FMOD** is not in git (licence; `.gitignore` has `fmod/`). `fmod\` needs `fmod.dll` from `api\core\lib\x64` (the
@@ -90,6 +95,27 @@ session (`U:\OpencodeProjects\catcar`, the Radio mod is `catcar/Radio/`); this r
 - ClubEQ refuses to start when Output is the device it records (`X [loopback]` in, `X` out): it would record itself.
 - The user's `settings.json` never got rewritten after the first launch (presets did). Saving errors now show in the
   status line instead of being swallowed; the cause isn't known yet.
+- **Latency (Settings dialog, `UI/SettingsDialog.cs`, saved in `settings.json`)**: mix block (`BufferLength`), output
+  buffers (`BufferCount`), gap between record and play head (`GapMs`), presets Safe 512x4/50 (the old fixed values),
+  Low 256x3/25, Lowest 128x3/12; all three ran clean on the loopback path (2026-11-27). Apply rebuilds the engine.
+- **Voicemeeter insert** (`Settings.Voicemeeter`, `Audio/Voicemeeter.cs`): Voicemeeter's Remote API
+  (`VoicemeeterRemote64.dll`, `VBVMR_AudioCallbackRegister` mode IN) calls ClubEQ on its audio thread with every
+  input strip; ClubEQ takes one strip's L/R, runs the Engine **clocked** (`NOSOUND_NRT`, `StartClocked`, `Write` then
+  `Render` per callback, UI thread only sets parameters, no drift control, gap >= one block + 64) and writes the mix
+  back. The strip then carries ClubEQ, not the dry sound, so no doubled sound, no loopback, no Output device. Verified
+  with Voicemeeter's meters: ClubEQ master 0 = strip and every bus silent. The user's browser strip is **hardware
+  strip 5 "Browser"** (channels 8/9; Potato = 5 hardware strips x 2 ch, then 3 virtual x 8), found by its label.
+  48 kHz only. **Measured strip -> A1 (Voicemeeter buffer 192, 2026-11-27)**: passed through 4.0 ms; ClubEQ with
+  block/gap 512/50 54 ms, 256/25 25, 128/12 16, 256/0 6.7, **128/0 4.0** (= Voicemeeter alone), 64/0 6.7; the Garage
+  +0.4-1.7 ms. The gap only adds delay here (one clock), so the dialog's presets use gap 0 on this path and choosing
+  the path sets 128/0 (Windows path: 512/4/50). The user tapped +20-47 ms at 512/50 before (tap tests are +-15 ms).
+  Help button (`UI/Help.cs`, top bar and Settings) = the setup steps. FMOD's ASIO output was a dead end: the Potato insert ASIO driver crashes FMOD (0xC0000409, its 38-char
+  name), the other Voicemeeter ASIO drivers show no record inputs in FMOD.
+- `Stop()` clears the clocked flag, so `StartExternal(.., clock)` sets it after its own `Stop()` (setting it before
+  made the UI thread mix too: play heads overran the writes, the voices restarted every few frames, 8x peaks).
+- Voices fade in over 0.2 s (`FadeIn`): FMOD's effects start from their own defaults and glide to ours, so every
+  start (Start, preset switch, chain edit, restart) began with ~0.1 s at up to 7x the level (0.27 vs 0.037 with the
+  smoke tone), on both paths. Not a parameter-order problem (all values reach FMOD before the first mix).
 - Loopback only delivers data while something plays. During silence the record head stalls, the engine notices the
   latency going negative and restarts the speakers aligned once data flows again.
 
@@ -145,7 +171,7 @@ session (`U:\OpencodeProjects\catcar`, the Radio mod is `catcar/Radio/`); this r
   click/drag/wheel), `Inspector` (right panel built in code from the registry: speaker, macro, or room/you/reverb/
   preset when nothing is selected), `Controls.cs` (row builders; slider + typed box, typing may exceed the range,
   double-click resets), `Prompt.cs`.
-- `MainWindow`: top bar (preset, input, output, master, meters, start/stop), macro strip (switch + slider per macro, ✎
+- `MainWindow`: top bar (preset, input, output, master, meters, EQ, Settings, start/stop), macro strip (switch + slider per macro, ✎
   edits it), room + inspector (the inspector moves under the room below 1000 px), status line. Edits autosave the
   preset after 1 s. Starts playing on launch once an input was picked before.
 

@@ -13,6 +13,11 @@ public class Settings
     public string Output = "";
     public string Preset = "Garage";
     public string CatcarBepInEx = ""; // the game's BepInEx folder, for "Import from CATCAR"
+    // Audio path and latency (the Settings dialog)
+    public bool Voicemeeter;         // false: record Input, play to Output. true: insert into a Voicemeeter strip.
+    public int VoicemeeterStrip = -1; // 0-based; -1 = the strip labelled "...Browser...", else the first virtual one
+    public int BufferLength = 512, BufferCount = 4; // FMOD's mix block (frames) and how many blocks the output queues
+    public int GapMs = 50;            // how far the speakers play behind the recording
     public double Width = 1280, Height = 800;
     public bool Maximized;
 }

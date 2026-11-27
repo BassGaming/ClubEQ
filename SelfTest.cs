@@ -19,7 +19,7 @@ static class SelfTest
 
     // ClubEQ.exe --smoke "<input name part>": plays a quiet 440 Hz tone into that device for 8 s and runs the Garage
     // scene (Underground on) recording it, so every DSP in the chain gets created and driven. Prints what happened.
-    public static int Smoke(string input) => Run3D(input, false);
+    public static int Smoke(string input, uint block = 512, int count = 4, int gap = 50) => Run3D(input, false, block, count, gap);
     public static int Pan(string input) => Run3D(input, true);
 
     // --pan: one dry speaker 5 m to your right, left, front and back; prints the left/right output peaks.
@@ -42,25 +42,38 @@ static class SelfTest
         }
     }
 
-    static int Run3D(string input, bool pan)
+    static int Run3D(string input, bool pan, uint block = 512, int count = 4, int gap = 50)
     {
         Console.WriteLine();
-        using var en = new Audio.Engine();
+        if (input == "clocked") return Clocked();
+        if (input.StartsWith("voicemeeter:")) return VoicemeeterSmoke(input["voicemeeter:".Length..]);
+        using var en = new Audio.Engine(FMOD.OUTPUTTYPE.AUTODETECT, block, count, gap);
+        if (input == "external") return External(en);
         var ins = en.Inputs();
         int i = ins.FindIndex(n => n.Contains(input, StringComparison.OrdinalIgnoreCase));
         if (i < 0) { Console.WriteLine("No input matching " + input); return 1; }
-        // the tone: a second FMOD system playing into the matching output device
+        var (tone, osc, ch) = Tone(input);
+        return Run3DWith(en, i, tone, osc, ch, pan);
+    }
+
+    // a second FMOD system playing a quiet 440 Hz tone into the output device whose name contains `device`
+    static (FMOD.System, FMOD.DSP, FMOD.Channel) Tone(string device)
+    {
         Audio.Engine.Ok(FMOD.Factory.System_Create(out var tone), "tone system");
         tone.getNumDrivers(out int n);
         int o = -1;
-        for (int k = 0; k < n; k++) { tone.getDriverInfo(k, out string name, 256, out _, out _, out _, out _); if (name.Contains(input, StringComparison.OrdinalIgnoreCase)) o = k; }
+        for (int k = 0; k < n; k++) { tone.getDriverInfo(k, out string name, 256, out _, out _, out _, out _); if (name.Contains(device, StringComparison.OrdinalIgnoreCase)) o = k; }
         if (o >= 0) tone.setDriver(o);
         tone.init(8, FMOD.INITFLAGS.NORMAL, IntPtr.Zero);
         tone.createDSPByType(FMOD.DSP_TYPE.OSCILLATOR, out var osc);
         osc.setParameterFloat(1, 440);
         tone.playDSP(osc, default, false, out var ch);
         ch.setVolume(.1f);
+        return (tone, osc, ch);
+    }
 
+    static int Run3DWith(Audio.Engine en, int i, FMOD.System tone, FMOD.DSP osc, FMOD.Channel ch, bool pan)
+    {
         en.Start(i);
         Console.WriteLine(en.Status);
         float maxOut = 0;
@@ -85,6 +98,106 @@ static class SelfTest
         Console.WriteLine(en.Status);
         ch.stop(); osc.release(); tone.close(); tone.release();
         return en.Running && maxOut > 0 ? 0 : 1;
+    }
+
+    // --smoke clocked: the Voicemeeter insert's engine side without Voicemeeter. A thread acts as its audio callback
+    // (Write 480 frames, Render 480, paced in real time) while the main thread drives the parameters; passes when
+    // the Garage comes out as loud as through the real-time path (a broken gap restarts the voices: loud clicks) and
+    // without a burst at the start.
+    static int Clocked()
+    {
+        using var en = new Audio.Engine(FMOD.OUTPUTTYPE.NOSOUND_NRT, 256, 2, 0);
+        en.StartClocked(48000, 2, "a test tone");
+        bool run = true;
+        float outPeak = 0;
+        var cb = new System.Threading.Thread(() =>
+        {
+            var buf = new short[480 * 2]; var mix = new float[480 * 2];
+            long n = 0;
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+            while (run)
+            {
+                for (int i = 0; i < 480; i++, n++) buf[i * 2] = buf[i * 2 + 1] = (short)(3000 * MathF.Sin(2 * MathF.PI * 440 * n / 48000));
+                en.Write(buf, 480);
+                en.Render(mix, 480);
+                foreach (var v in mix) outPeak = Math.Max(outPeak, Math.Abs(v));
+                while (run && clock.Elapsed.TotalSeconds * 48000 < n) System.Threading.Thread.Sleep(1);
+            }
+        });
+        cb.Start();
+        var p = Builtin.Garage();
+        float mi = 0, mo = 0;
+        for (int f = 0; f < 180; f++)
+        {
+            en.Update(p, 1 / 60f);
+            if (f > 90) { mi = Math.Max(mi, en.InputLevel); mo = Math.Max(mo, en.OutputLevel); }
+            System.Threading.Thread.Sleep(16);
+        }
+        run = false; cb.Join();
+        Console.WriteLine($"clocked: peak in {mi:0.000} out {mo:0.000} rendered {outPeak:0.000} | {en.Status}");
+        en.Stop();
+        // the Garage at this tone: 0.037 through the normal (real-time) path
+        // and no burst when the voices start: unfaded it peaked at 0.27 (FMOD's effects gliding from their defaults)
+        return mi > .05f && mo > .025f && mo < .05f && outPeak < .06f ? 0 : 1;
+    }
+
+    // --smoke "voicemeeter:<device>": the real insert. The tone plays into <device> (the strip's Windows device);
+    // ClubEQ replaces that strip's sound for 6 s and prints the levels.
+    static int VoicemeeterSmoke(string device)
+    {
+        using var en = new Audio.Engine(FMOD.OUTPUTTYPE.NOSOUND_NRT, 256, 2, 0);
+        var strips = Audio.Voicemeeter.Strips();
+        int s = Audio.Voicemeeter.DefaultStrip(strips);
+        Console.WriteLine("strip: " + (s < strips.Count ? strips[s] : "none"));
+        var (tone, osc, ch) = Tone(device);
+        float mi = 0, mo = 0;
+        using (var vm = new Audio.Voicemeeter(en, s, s < strips.Count ? strips[s] : ""))
+        {
+            var p = Builtin.Garage();
+            for (int f = 0; f < 360; f++)
+            {
+                tone.update(); en.Update(p, 1 / 60f);
+                if (f > 120) { mi = Math.Max(mi, en.InputLevel); mo = Math.Max(mo, en.OutputLevel); }
+                System.Threading.Thread.Sleep(16);
+            }
+            Console.WriteLine($"voicemeeter: peak in {mi:0.000} out {mo:0.000} | {vm.Note ?? en.Status}");
+        }
+        en.Stop();
+        ch.stop(); osc.release(); tone.close(); tone.release();
+        return mi > .01f && mo > 0 ? 0 : 1;
+    }
+
+    // --smoke external: the Android input path. A thread pushes a quiet 440 Hz tone through Engine.Write in 10 ms
+    // blocks (as AudioRecord does) and the Garage plays it; passes when sound comes out.
+    static int External(Audio.Engine en)
+    {
+        en.StartExternal(48000, 2, "a test tone");
+        bool run = true;
+        var feeder = new System.Threading.Thread(() =>
+        {
+            var buf = new short[480 * 2];
+            long n = 0;
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+            while (run)
+            {
+                for (int i = 0; i < 480; i++, n++) buf[i * 2] = buf[i * 2 + 1] = (short)(3000 * MathF.Sin(2 * MathF.PI * 440 * n / 48000));
+                en.Write(buf, 480);
+                while (run && clock.Elapsed.TotalSeconds * 48000 < n) System.Threading.Thread.Sleep(1);
+            }
+        });
+        feeder.Start();
+        var p = Builtin.Garage();
+        float mi = 0, mo = 0;
+        for (int f = 0; f < 180; f++)
+        {
+            en.Update(p, 1 / 60f);
+            if (f > 90) { mi = Math.Max(mi, en.InputLevel); mo = Math.Max(mo, en.OutputLevel); }
+            System.Threading.Thread.Sleep(16);
+        }
+        run = false; feeder.Join();
+        Console.WriteLine($"external: peak in {mi:0.000} out {mo:0.000} | speakers {string.Join(" ", en.Levels.Select(l => l.ToString("0.000")))} | {en.Status}");
+        en.Stop();
+        return mi > .05f && mo > 0 ? 0 : 1;
     }
 
     public static int Run()

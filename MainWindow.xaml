@@ -71,6 +71,8 @@
                     </Grid>
                 </StackPanel>
                 <ToggleButton x:Name="EqButton" Style="{StaticResource Pill}" Content="EQ" Margin="0,4,12,4" VerticalAlignment="Bottom" ToolTip="Show the master EQ"/>
+                <Button x:Name="SettingsButton" Style="{StaticResource BtnSmall}" Content="⚙ Settings" Margin="0,4,6,4" VerticalAlignment="Bottom" ToolTip="Audio path and latency"/>
+                <Button x:Name="HelpButton" Style="{StaticResource BtnSmall}" Content="? Help" Margin="0,4,12,4" VerticalAlignment="Bottom" ToolTip="How to set up the Voicemeeter insert (lowest delay, no doubled sound)"/>
                 <Button x:Name="PowerButton" Style="{StaticResource BtnPrimary}" Content="Start" MinWidth="96" Margin="0,4,0,4" VerticalAlignment="Bottom"/>
             </WrapPanel>
         </Border>

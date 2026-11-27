@@ -13,7 +13,7 @@ public sealed class FmodException(string msg) : Exception(msg);
 // together and always get the same frequency, so they stay sample-aligned.
 public sealed class Engine : IDisposable
 {
-    const int LatencyMs = 50;
+    public readonly int GapMs;
     // Master 100 % = the game's loudness: the same sweep measured 19.4 dB hotter in ClubEQ at .25 (CATCAR mixes the
     // radios at FX -14.4 + Master -5.9 dB), and real music then sat ~10 dB in the limiter, which pumped, dulled the
     // highs and flattened the 3D. Now the limiter only catches stray peaks. Turn up Voicemeeter or Windows instead.
@@ -27,6 +27,8 @@ public sealed class Engine : IDisposable
     string eqKey = "";
     int recDriver = -1, rate, recChannels;
     uint soundLen; // in samples (frames)
+    volatile bool external; // fed by Write (Android's playback capture) instead of an FMOD record driver
+    volatile uint writePos;
 
     sealed class Voice
     {
@@ -36,6 +38,7 @@ public sealed class Engine : IDisposable
         public FMOD.DSP Rear; // the front/back cue (Room.RearShade), last on the direct sound
         public Dictionary<string, float> Cur = new();
         public bool Inside;
+        public float Fade; // 0 -> 1 over FadeIn after the voice starts
     }
     readonly List<Voice> voices = new();
     Preset playing;
@@ -49,7 +52,7 @@ public sealed class Engine : IDisposable
     uint target, lag0;
 
     public string Status { get; private set; } = "Stopped";
-    public bool Running => recDriver >= 0;
+    public bool Running => recDriver >= 0 || external;
     FMOD.DSP_PROCESS_CALLBACK captureCb, gainCb; // held so the GC can't collect the delegates FMOD calls
     volatile float outGain = Headroom;
     readonly object capLock = new();
@@ -93,10 +96,16 @@ public sealed class Engine : IDisposable
         if (r != FMOD.RESULT.OK) throw new FmodException($"{what}: {FMOD.Error.String(r)} ({r})");
     }
 
-    public Engine()
+    // output NOSOUND_NRT (Android): every sys.update mixes one 512-frame block, so the caller's audio thread drives the
+    // mix and takes it from the capture DSP (StopCapture/StartCapture) for its own AudioTrack.
+    // Latency (Settings): the output queues bufferCount blocks of bufferLength frames; the play heads run gapMs
+    // behind the record head. NOSOUND_NRT mixes one block per sys.update.
+    public Engine(FMOD.OUTPUTTYPE output = FMOD.OUTPUTTYPE.AUTODETECT, uint bufferLength = 512, int bufferCount = 4, int gapMs = 50)
     {
+        GapMs = Math.Clamp(gapMs, 0, 400);
         Ok(FMOD.Factory.System_Create(out sys), "System_Create");
-        Ok(sys.setDSPBufferSize(512, 4), "setDSPBufferSize");
+        Ok(sys.setOutput(output), "setOutput");
+        Ok(sys.setDSPBufferSize(Math.Clamp(bufferLength, 64, 4096), Math.Clamp(bufferCount, 2, 16)), "setDSPBufferSize");
         // Pan for stereo like the game does, whatever the device offers: on a 7.1 device (Voicemeeter In 3 is one) FMOD
         // would pan into rear channels that the headphones never get, which flattens the 3D picture.
         Ok(sys.setSoftwareFormat(48000, FMOD.SPEAKERMODE.STEREO, 0), "stereo");
@@ -170,6 +179,70 @@ public sealed class Engine : IDisposable
         Stop();
         Ok(sys.getRecordDriverInfo(input, out string name, 256, out _, out rate, out _, out recChannels, out var state), "input info");
         if ((state & FMOD.DRIVER_STATE.CONNECTED) == 0) throw new FmodException($"{name} is not connected");
+        CreateBuffer();
+        Ok(sys.recordStart(input, rec, true), "record start");
+        recDriver = input;
+        Status = $"Listening to {name} ({rate} Hz, {recChannels} ch)";
+    }
+
+    // Input from outside FMOD: the caller pushes interleaved PCM16 with Write (from its own thread) and must stop
+    // writing before Stop.
+    public void StartExternal(int sampleRate, int channels, string name, bool clock = false)
+    {
+        Stop();
+        clocked = clock; // after Stop (it clears it), before CreateBuffer (it sizes the gap for it)
+        rate = sampleRate; recChannels = channels;
+        CreateBuffer();
+        writePos = 0;
+        external = true;
+        Status = $"Listening to {name} ({rate} Hz, {recChannels} ch)";
+    }
+
+    // Clocked input (Voicemeeter's insert): one audio thread writes a block with Write and takes the same number of
+    // frames back with Render; the UI thread keeps calling Update for the parameters. One clock for in and out, so no
+    // drift control. Needs output NOSOUND_NRT.
+    public void StartClocked(int sampleRate, int channels, string name)
+    {
+        StartExternal(sampleRate, channels, name, true);
+        StartCapture();
+    }
+
+    volatile bool clocked;
+
+    public void Render(float[] dst, int frames)
+    {
+        for (int i = 0; i < 64; i++) // 64 blocks: more than any audio callback asks for
+        {
+            lock (capLock)
+            {
+                if (captured == null) break;
+                if (captured.Count >= frames * 2)
+                {
+                    captured.CopyTo(0, dst, 0, frames * 2);
+                    captured.RemoveRange(0, frames * 2);
+                    return;
+                }
+            }
+            if (sys.update() != FMOD.RESULT.OK) break;
+        }
+        Array.Clear(dst, 0, frames * 2);
+    }
+
+    public void Write(short[] pcm, int frames)
+    {
+        if (!external || frames <= 0) return;
+        frames = (int)Math.Min((uint)frames, soundLen);
+        int bpf = recChannels * 2;
+        uint wp = writePos;
+        Ok(rec.@lock(wp * (uint)bpf, (uint)(frames * bpf), out var p1, out var p2, out var l1, out var l2), "write lock");
+        Marshal.Copy(pcm, 0, p1, (int)l1 / 2);
+        if (p2 != IntPtr.Zero) Marshal.Copy(pcm, (int)l1 / 2, p2, (int)l2 / 2);
+        rec.unlock(p1, p2, l1, l2);
+        writePos = (wp + (uint)frames) % soundLen;
+    }
+
+    void CreateBuffer()
+    {
         soundLen = (uint)rate; // 1 s
         var ex = new FMOD.CREATESOUNDEXINFO
         {
@@ -180,17 +253,19 @@ public sealed class Engine : IDisposable
             length = soundLen * (uint)recChannels * 2,
         };
         Ok(sys.createSound("", FMOD.MODE.LOOP_NORMAL | FMOD.MODE.OPENUSER | FMOD.MODE._3D, ref ex, out rec), "record buffer");
-        Ok(sys.recordStart(input, rec, true), "record start");
-        recDriver = input;
-        target = (uint)(rate * LatencyMs / 1000);
+        target = (uint)(rate * GapMs / 1000);
+        // clocked: each Render mixes whole blocks after the Write, so the last block may read one block past what the
+        // caller wrote; this much gap keeps it on written samples (plus the resampler's few samples of look-ahead)
+        if (clocked && sys.getDSPBufferSize(out uint block, out _) == FMOD.RESULT.OK) target = Math.Max(target, block + 64);
         recorded = played = 0; lastRec = lastPlay = 0; latencyAvg = target; started = false;
-        Status = $"Listening to {name} ({rate} Hz, {recChannels} ch)";
     }
 
     public void Stop()
     {
         StopVoices();
         if (recDriver >= 0) { sys.recordStop(recDriver); recDriver = -1; }
+        if (clocked) StopCapture();
+        external = clocked = false;
         if (rec.hasHandle()) { rec.release(); rec.clearHandle(); }
         InputLevel = OutputLevel = 0;
         Status = "Stopped";
@@ -222,7 +297,7 @@ public sealed class Engine : IDisposable
             Stop();
             Status = "Stopped: " + e.Message;
         }
-        sys.update();
+        if (!clocked) sys.update(); // clocked: the audio thread mixes (Render)
     }
 
     void Tick(Preset p, float dt)
@@ -240,7 +315,8 @@ public sealed class Engine : IDisposable
         ApplyEq(p.Eq);
         if (!Running) return;
 
-        Ok(sys.getRecordPosition(recDriver, out uint rp), "record position");
+        uint rp = writePos;
+        if (!external) Ok(sys.getRecordPosition(recDriver, out rp), "record position");
         uint d = rp >= lastRec ? rp - lastRec : rp + soundLen - lastRec;
         lastRec = rp; recorded += d;
         InputLevel = Peak(rp);
@@ -258,13 +334,19 @@ public sealed class Engine : IDisposable
         uint pd = pp >= lastPlay ? pp - lastPlay : pp + soundLen - lastPlay;
         lastPlay = pp; played += pd;
         long lat = recorded - played; // = target + voice 0's own offset when on time
-        if (lat < 0 || lat > soundLen / 2) { StopVoices(); return; } // lost (device hiccup): restart aligned
+        // lost (device hiccup): restart aligned. Clocked, a block can land between reading the two heads, so a
+        // slightly negative reading is normal there.
+        if ((!clocked && lat < 0) || lat < -(long)soundLen / 4 || lat > soundLen / 2) { StopVoices(); return; }
         latencyAvg = latencyAvg * .97 + lat * .03;
-        float freq = rate * (float)(1 + Math.Clamp((latencyAvg - target - lag0) / target * .01, -.005, .005));
-        foreach (var v in voices) v.Ch.setFrequency(freq);
+        if (!clocked)
+        {
+            float freq = rate * (float)(1 + Math.Clamp((latencyAvg - target - lag0) / target * .01, -.005, .005));
+            foreach (var v in voices) v.Ch.setFrequency(freq);
+        }
 
         bool anySolo = p.Speakers.Any(x => x.Solo);
         float k = Math.Min(1, dt * 6); // the mod's smoothing rate (Fx.Update)
+        foreach (var v in voices) v.Fade = Math.Min(1, v.Fade + dt / FadeIn);
         if (Levels.Length != voices.Count) Levels = new float[voices.Count];
         for (int i = 0; i < voices.Count; i++) ApplySpeaker(p, p.Speakers[i], voices[i], k, anySolo, i);
 
@@ -291,6 +373,7 @@ public sealed class Engine : IDisposable
             // instead of one phantom source in between.
             v.Ch.setPosition((start + soundLen - Lag(s)) % soundLen, FMOD.TIMEUNIT.PCM);
             v.Ch.setReverbProperties(0, 1); // into the room reverb: FMOD's system reverb, as Unity's reverb zone
+            v.Ch.setVolume(0); // fades in (ApplySpeaker)
             v.Ch.setPaused(false); // still held by the paused group
             v.Chain = s.Chain.Select(e => Dsp.Create(sys, e.Type)).ToList();
             // After the fader (volume, distance, panning), in chain order, as Unity wires an AudioSource's filters:
@@ -306,6 +389,14 @@ public sealed class Engine : IDisposable
             voices.Add(v);
         }
         lastPlay = (start + soundLen - lag0) % soundLen; played = recorded - target - lag0; latencyAvg = target + lag0;
+        if (clocked)
+        {
+            // the audio thread kept writing while we built the voices, and nothing pulls the gap back later (no drift
+            // control): move the paused voices up by what came in meanwhile
+            uint dl = (writePos + soundLen - rp) % soundLen;
+            for (int i = 0; i < voices.Count; i++) voices[i].Ch.setPosition((start + dl + soundLen - Lag(p.Speakers[i])) % soundLen, FMOD.TIMEUNIT.PCM);
+            lastPlay = (lastPlay + dl) % soundLen; played += dl;
+        }
         started = true;
         group.setPaused(false);
     }
@@ -331,6 +422,10 @@ public sealed class Engine : IDisposable
         }
     }
 
+    // FMOD's effects start from their own defaults and glide to ours: unfaded, every start (Start, preset switch, a
+    // changed chain, a restart after a hiccup) began with ~0.1 s at up to 7x the level (measured with the smoke tone).
+    const float FadeIn = .2f;
+
     void ApplySpeaker(Preset p, Speaker s, Voice v, float k, bool anySolo, int i)
     {
         v.Inside = Mix.IsInside(s, p.Room);
@@ -344,7 +439,7 @@ public sealed class Engine : IDisposable
         var cur = v.Cur;
         v.Ch.setMute(s.Mute || (anySolo && !s.Solo));
         float vol = Math.Max(0, cur["Volume"]);
-        v.Ch.setVolume(vol);
+        v.Ch.setVolume(vol * v.Fade);
         var sp = new FMOD.VECTOR { x = s.X, y = s.Y, z = s.Z };
         var zero = new FMOD.VECTOR();
         v.Ch.set3DAttributes(ref sp, ref zero);

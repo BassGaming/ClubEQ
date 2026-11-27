@@ -19,6 +19,7 @@ namespace ClubEQ;
 public partial class MainWindow : Window
 {
     Engine engine;
+    Voicemeeter vm; // the Voicemeeter insert, while it plays
     readonly Settings settings = Store.LoadSettings();
     List<Preset> presets;
     Preset cur;
@@ -46,9 +47,7 @@ public partial class MainWindow : Window
         presets = Store.LoadPresets();
         LoadPreset(presets.FirstOrDefault(p => p.Name == settings.Preset) ?? presets[0]);
 
-        try { engine = new Engine(); }
-        catch (Exception e) { Status("Audio engine failed: " + e.Message + " (is fmod.dll next to ClubEQ.exe?)"); }
-        FillDevices();
+        CreateEngine();
 
         PresetBox.SelectionChanged += (_, _) => { if (!loading && PresetBox.SelectedIndex >= 0) { SaveNow(); LoadPreset(presets[PresetBox.SelectedIndex]); } };
         InputBox.SelectionChanged += (_, _) => { if (loading) return; settings.Input = InputBox.SelectedItem as string ?? ""; SaveSettings(); if (engine?.Running == true) Start(); };
@@ -61,7 +60,9 @@ public partial class MainWindow : Window
         EqOn.Click += (_, _) => { cur.Eq.On = EqOn.IsChecked == true; Changed(); };
         EqFlat.Click += (_, _) => { foreach (var sl in eqSliders) sl.Value = 0; };
         BuildEq();
-        PowerButton.Click += (_, _) => { if (engine?.Running == true) { engine.Stop(); UpdatePower(); } else Start(); };
+        PowerButton.Click += (_, _) => { if (engine?.Running == true) { StopAudio(); UpdatePower(); } else Start(); };
+        SettingsButton.Click += (_, _) => SettingsDialog.Show(this, settings, ApplySettings);
+        HelpButton.Click += (_, _) => Help.Show(this);
 
         saveSoon.Tick += (_, _) => SaveNow();
         frame.Tick += (_, _) => Frame();
@@ -71,11 +72,42 @@ public partial class MainWindow : Window
         Loaded += (_, _) =>
         {
             frame.Start();
-            if (engine != null && settings.Input.Length > 0) Start(); // used before: play right away
+            if (engine != null && (settings.Voicemeeter || settings.Input.Length > 0)) Start(); // used before: play right away
         };
     }
 
-    // ---------- devices ----------
+    // ---------- engine, devices ----------
+    // The audio path and latency come from the settings; changing them builds a new engine.
+    void CreateEngine()
+    {
+        StopAudio();
+        engine?.Dispose(); engine = null;
+        try
+        {
+            engine = settings.Voicemeeter
+                ? new Engine(FMOD.OUTPUTTYPE.NOSOUND_NRT, (uint)settings.BufferLength, 2, settings.GapMs) // Voicemeeter's thread mixes
+                : new Engine(FMOD.OUTPUTTYPE.AUTODETECT, (uint)settings.BufferLength, settings.BufferCount, settings.GapMs);
+        }
+        catch (Exception e) { Status("Audio engine failed: " + e.Message + " (is fmod.dll next to ClubEQ.exe?)"); }
+        InputBox.IsEnabled = OutputBox.IsEnabled = !settings.Voicemeeter; // the insert uses neither
+        FillDevices();
+    }
+
+    void ApplySettings()
+    {
+        bool was = engine?.Running == true;
+        SaveSettings();
+        CreateEngine();
+        if (was) Start();
+        UpdatePower();
+    }
+
+    void StopAudio()
+    {
+        vm?.Dispose(); vm = null; // first: its thread uses the engine
+        engine?.Stop();
+    }
+
     void FillDevices()
     {
         if (engine == null) return;
@@ -106,6 +138,16 @@ public partial class MainWindow : Window
     void Start()
     {
         if (engine == null) return;
+        if (settings.Voicemeeter)
+        {
+            StopAudio();
+            var strips = Voicemeeter.Strips();
+            int s = settings.VoicemeeterStrip >= 0 ? settings.VoicemeeterStrip : Voicemeeter.DefaultStrip(strips);
+            try { vm = new Voicemeeter(engine, s, s < strips.Count ? strips[s] : $"{s + 1}"); }
+            catch (Exception e) { engine.Stop(); Status("Voicemeeter: " + e.Message); }
+            UpdatePower();
+            return;
+        }
         if (InputBox.SelectedIndex < 0) { Status("Pick an input device first."); return; }
         // Recording a device's loopback while playing into that same device records ClubEQ's own output again and
         // again: every sound smeared with repeats, no direction left. Refuse it.
@@ -330,7 +372,7 @@ public partial class MainWindow : Window
         InMeter.Width = 120 * Math.Clamp(engine.InputLevel, 0, 1);
         Meters(engine.OutputLR, dt);
         Room.InvalidateVisual();
-        StatusText.Text = t < noteUntil ? note : engine.Status;
+        StatusText.Text = t < noteUntil ? note : vm?.Note ?? engine.Status;
     }
 
     // ---------- master EQ ----------
@@ -431,6 +473,7 @@ public partial class MainWindow : Window
         if (WindowState == WindowState.Normal) { settings.Width = Width; settings.Height = Height; }
         SaveSettings();
         frame.Stop();
+        StopAudio();
         engine?.Dispose();
     }
 }
